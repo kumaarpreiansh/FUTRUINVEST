@@ -13,7 +13,7 @@ def demo_cfg():
         "strategy": {
             "name": "t", "fast_period": 20, "slow_period": 50,
             "fee_pct": 0.1, "slippage_pct": 0.05, "position_pct": 100.0,
-            "out_of_sample_pct": 30,
+            "stop_loss_pct": 6.0, "out_of_sample_pct": 30,
         },
         "risk": {
             "max_risk_per_trade_pct": 1.0, "max_portfolio_drawdown_pct": 15.0,
@@ -49,6 +49,56 @@ class TestBacktest(unittest.TestCase):
             m = bt[key]
             self.assertIn("max_drawdown_pct", m)
             self.assertGreaterEqual(m["max_drawdown_pct"], 0)
+
+
+def make_bars(closes):
+    bars = []
+    prev = closes[0]
+    for i, c in enumerate(closes):
+        o = prev
+        bars.append({
+            "date": f"2025-{1 + i // 28:02d}-{1 + i % 28:02d}",
+            "open": o, "high": max(o, c) * 1.001,
+            "low": min(o, c) * 0.999, "close": c, "volume": 1000,
+        })
+        prev = c
+    return bars
+
+
+class TestStopLoss(unittest.TestCase):
+    def strategy(self, stop_pct):
+        return {
+            "name": "t", "fast": 3, "slow": 6, "fee_pct": 0.0,
+            "slippage_pct": 0.0, "position_pct": 100.0,
+            "stop_loss_pct": stop_pct, "out_of_sample_pct": 0,
+        }
+
+    def crash_series(self):
+        # flat, dip-and-cross-up to trigger a fresh-cross entry, then one
+        # sharp intrabar crash followed by a slow drift so the crossover
+        # exit lags well behind the stop
+        closes = [100.0] * 6 + [99.0, 98.0, 101.0, 103.0, 105.0, 106.0]
+        closes += [74.0] + [74.0 * 0.998 ** i for i in range(1, 15)]
+        return make_bars(closes)
+
+    def test_stop_caps_single_trade_loss(self):
+        bars = self.crash_series()
+        with_stop = main._backtest_slice(self.strategy(5.0), bars)
+        self.assertEqual(with_stop["num_trades"], 1)
+        # worst trade loss is near the 5% stop, far from the full crash depth
+        self.assertGreater(with_stop["avg_trade_pct"], -8.0)
+
+    def test_no_stop_rides_the_crash_deeper(self):
+        bars = self.crash_series()
+        no_stop = main._backtest_slice(self.strategy(0.0), bars)
+        with_stop = main._backtest_slice(self.strategy(5.0), bars)
+        self.assertLess(no_stop["total_return_pct"], with_stop["total_return_pct"])
+
+    def test_no_reentry_while_trend_unchanged(self):
+        # after a stop-out, no new entry until the fast SMA crosses up again
+        bars = self.crash_series()
+        result = main._backtest_slice(self.strategy(5.0), bars)
+        self.assertEqual(result["num_trades"], 1)
 
 
 class TestRiskGate(unittest.TestCase):

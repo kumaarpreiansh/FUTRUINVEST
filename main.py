@@ -221,14 +221,22 @@ def run_debate(bull, bear):
 def build_strategy(debate, cfg):
     s = cfg["strategy"]
     direction = "long" if debate["winner"] == "bull" else "flat"
+    # size the position so a stop-out loses at most max_risk_per_trade_pct
+    # of equity: position = risk budget / stop distance
+    position_pct = s["position_pct"]
+    stop = s.get("stop_loss_pct", 0.0)
+    risk_budget = cfg.get("risk", {}).get("max_risk_per_trade_pct")
+    if stop > 0 and risk_budget:
+        position_pct = min(position_pct, risk_budget / stop * 100)
     return {
         "name": s["name"],
         "direction": direction,
         "entry": f"fast SMA({s['fast_period']}) crosses above slow SMA({s['slow_period']})",
         "exit": f"fast SMA({s['fast_period']}) crosses below slow SMA({s['slow_period']})",
+        "stop_loss_pct": s.get("stop_loss_pct", 0.0),
         "fee_pct": s["fee_pct"],
         "slippage_pct": s["slippage_pct"],
-        "position_pct": s["position_pct"],
+        "position_pct": position_pct,
         "fast": s["fast_period"],
         "slow": s["slow_period"],
         "out_of_sample_pct": s["out_of_sample_pct"],
@@ -251,8 +259,11 @@ def run_backtest(strategy, data):
 def _backtest_slice(strategy, bars):
     closes = [b["close"] for b in bars]
     cost = (strategy["fee_pct"] + strategy["slippage_pct"]) / 100
+    stop = strategy.get("stop_loss_pct", 0.0) / 100
+    pos_frac = strategy["position_pct"] / 100
     equity, in_pos, entry_px = 1.0, False, 0.0
     curve, trades, bars_in_market = [1.0], [], 0
+    prev_fast = prev_slow = None
     for i in range(1, len(closes)):
         fast = sma(closes, strategy["fast"], i)
         slow = sma(closes, strategy["slow"], i)
@@ -261,19 +272,30 @@ def _backtest_slice(strategy, bars):
         if fast is None or slow is None:
             curve.append(equity)
             continue
-        if not in_pos and fast > slow:
+        if in_pos:
+            stop_price = entry_px * (1 - stop) if stop > 0 else None
+            if stop_price is not None and bars[i]["low"] <= stop_price:
+                # gap below the stop fills at the open, not the stop price
+                fill = bars[i]["open"] if bars[i]["open"] < stop_price else stop_price
+                pnl = fill * (1 - cost) / entry_px - 1
+                trades.append(pnl)
+                equity *= 1 + pnl * pos_frac
+                in_pos = False
+            elif fast < slow:
+                pnl = closes[i] * (1 - cost) / entry_px - 1
+                trades.append(pnl)
+                equity *= 1 + pnl * pos_frac
+                in_pos = False
+        if (not in_pos and prev_fast is not None and prev_slow is not None
+                and prev_fast <= prev_slow and fast > slow):
             in_pos, entry_px = True, closes[i] * (1 + cost)
-        elif in_pos and fast < slow:
-            exit_px = closes[i] * (1 - cost)
-            pnl = exit_px / entry_px - 1
-            trades.append(pnl)
-            equity *= 1 + pnl * strategy["position_pct"] / 100
-            in_pos = False
-        curve.append(equity if not in_pos else equity * (closes[i] * (1 - cost) / entry_px))
+        prev_fast, prev_slow = fast, slow
+        mtm = 1 + (closes[i] * (1 - cost) / entry_px - 1) * pos_frac if in_pos else 1
+        curve.append(equity * mtm)
     if in_pos:
         pnl = closes[-1] * (1 - cost) / entry_px - 1
         trades.append(pnl)
-        equity *= 1 + pnl * strategy["position_pct"] / 100
+        equity *= 1 + pnl * pos_frac
         curve[-1] = equity
     return _metrics(curve, trades, bars_in_market, len(bars))
 
@@ -344,6 +366,11 @@ def run_risk_checks(strategy, bt, cfg):
         bt["in_sample"]["max_drawdown_pct"] <= r["max_portfolio_drawdown_pct"]
     )
     checks["position_size_ok"] = strategy["position_pct"] <= 100.0
+    checks["per_trade_risk_ok"] = (
+        strategy["stop_loss_pct"] > 0
+        and strategy["position_pct"] * strategy["stop_loss_pct"] / 100
+        <= r["max_risk_per_trade_pct"] + 1e-9
+    )
     checks["open_positions_ok"] = 1 <= r["max_open_positions"]
     blocked = [k for k, ok in checks.items() if not ok]
     return {"checks": checks, "blocked_on": blocked, "approved": not blocked}

@@ -6,5 +6,6 @@ fast_period: 20
 slow_period: 50
 fee_pct: 0.1          # per side, percent of trade value
 slippage_pct: 0.05    # per side, percent of trade value
+stop_loss_pct: 6.0    # exit if price falls this far below entry fill; 0 disables
 position_pct: 100.0   # percent of equity deployed when in a position
 out_of_sample_pct: 30 # last N% of history reserved for out-of-sample testing
