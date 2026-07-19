@@ -1,0 +1,17 @@
+# Committee roster. Each role maps to agents/<role>/PROMPT.md.
+# Wiring these to an LLM API is optional — main.py runs a deterministic,
+# rule-based stand-in for each role so the pipeline works offline.
+
+roles:
+  - researcher
+  - fundamental
+  - technical
+  - news
+  - sentiment
+  - bull
+  - bear
+  - debate
+  - strategy
+  - backtest
+  - risk
+  - verdict

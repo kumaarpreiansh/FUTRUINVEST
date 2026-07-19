@@ -1,0 +1,15 @@
+# risk.yaml — EXAMPLE VALUES ONLY. Not recommendations.
+# Choose limits that fit your own situation.
+
+max_risk_per_trade_pct: 1.0
+max_daily_loss_pct: 3.0
+max_weekly_loss_pct: 6.0
+max_portfolio_drawdown_pct: 15.0
+max_open_positions: 5
+max_concentration_pct: 20.0
+max_correlation: 0.7
+trading_hours: "market_only"
+kill_switch: true
+require_human_approval: true
+live_trading: false      # stays false
+allow_withdrawals: false # stays false

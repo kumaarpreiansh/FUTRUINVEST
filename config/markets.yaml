@@ -1,0 +1,8 @@
+# Which market/asset the committee studies. Data comes from data/raw/<asset>.csv
+# (columns: date,open,high,low,close,volume); if missing, main.py generates a
+# clearly-labeled synthetic series so the pipeline can be exercised end to end.
+
+asset: "DEMO"
+market: "equities"
+timeframe: "1d"
+min_bars: 250          # refuse to run research on less history than this

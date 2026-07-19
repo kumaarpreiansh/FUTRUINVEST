@@ -1,0 +1,17 @@
+.env
+.venv/
+venv/
+__pycache__/
+*.pyc
+data/raw/*
+data/processed/*
+data/cache/*
+!data/**/.gitkeep
+logs/*
+!logs/.gitkeep
+paper_trading/*
+!paper_trading/.gitkeep
+backtests/*
+!backtests/.gitkeep
+reports/*
+!reports/.gitkeep

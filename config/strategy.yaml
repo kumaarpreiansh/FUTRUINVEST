@@ -1,0 +1,10 @@
+# Default demo strategy: SMA crossover. EXAMPLE VALUES ONLY.
+# Every backtest applies fees and slippage — keep both non-zero.
+
+name: "sma-crossover-demo"
+fast_period: 20
+slow_period: 50
+fee_pct: 0.1          # per side, percent of trade value
+slippage_pct: 0.05    # per side, percent of trade value
+position_pct: 100.0   # percent of equity deployed when in a position
+out_of_sample_pct: 30 # last N% of history reserved for out-of-sample testing
