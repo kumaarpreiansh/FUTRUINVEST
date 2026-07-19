@@ -55,9 +55,14 @@ real execution is out of scope by default.
 | Final Verdict Agent | Synthesize everything | All outputs | Verdict |
 | **Human Reviewer** | **The final decision** | Verdict | Approve/reject |
 
-Each role's LLM prompt lives in `agents/<role>/PROMPT.md`. `main.py` ships with
-deterministic, rule-based stand-ins for every role so the whole pipeline runs
-offline with no API keys.
+Each role's LLM prompt lives in `agents/<role>/PROMPT.md`. The **bull and bear
+researchers call Claude** (`claude-opus-4-8`, configurable in
+`config/agents.yaml`) when `ANTHROPIC_API_KEY` is set in `.env`: each sends its
+PROMPT.md as the system prompt plus the research brief as its only data, and
+returns a structured thesis (evidence, confidence, invalidation conditions).
+Every role — including bull/bear when no key is set or a call fails — falls
+back to a deterministic rule-based stand-in, so the whole pipeline always runs
+offline. The verdict memo records which mode produced each thesis.
 
 ## Quick start
 

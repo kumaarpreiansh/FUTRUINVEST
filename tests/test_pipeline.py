@@ -133,6 +133,39 @@ class TestRiskGate(unittest.TestCase):
         self.assertTrue(main.run_risk_checks(strat, bt, cfg)["approved"])
 
 
+class TestLLMWiring(unittest.TestCase):
+    def setUp(self):
+        import os
+        self._saved = {k: os.environ.pop(k, None)
+                       for k in ("ANTHROPIC_API_KEY", "LLM_API_KEY")}
+
+    def tearDown(self):
+        import os
+        for k, v in self._saved.items():
+            if v is not None:
+                os.environ[k] = v
+
+    def test_no_key_returns_none(self):
+        import llm
+        self.assertIsNone(llm.run_llm_agent("bull", {"asset": "X"}, demo_cfg()))
+
+    def test_agents_fall_back_deterministic_without_key(self):
+        brief = {"asset": "X", "trend": "down", "sma_fast": 1, "sma_slow": 2,
+                 "rsi14": 50.0, "return_3m_pct": -5.0, "annualized_vol_pct": 20.0}
+        bull = main.run_bull_agent(brief, demo_cfg())
+        bear = main.run_bear_agent(brief, demo_cfg())
+        self.assertEqual(bull["source"], "deterministic")
+        self.assertEqual(bear["source"], "deterministic")
+        self.assertIn("evidence", bull)
+        self.assertIn("invalidation", bear)
+
+    def test_prompt_files_exist_for_wired_roles(self):
+        from pathlib import Path
+        root = Path(main.__file__).resolve().parent
+        for role in ("bull", "bear"):
+            self.assertTrue((root / "agents" / role / "PROMPT.md").exists())
+
+
 class TestDebate(unittest.TestCase):
     def test_no_evidence_rejects(self):
         d = main.run_debate(

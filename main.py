@@ -24,6 +24,8 @@ from pathlib import Path
 
 import yaml
 
+from llm import run_llm_agent
+
 ROOT = Path(__file__).resolve().parent
 
 
@@ -165,7 +167,10 @@ def statistics_stdev(xs):
 
 # ── 4-6. Bull, bear, debate ──────────────────────────────────────────────────
 
-def run_bull_agent(brief):
+def run_bull_agent(brief, cfg=None):
+    llm = run_llm_agent("bull", brief, cfg)
+    if llm is not None:
+        return {"side": "bull", "source": "llm", **llm}
     evidence = []
     if brief["trend"] == "up":
         evidence.append(f"fast SMA {brief['sma_fast']} above slow SMA {brief['sma_slow']} (uptrend)")
@@ -175,13 +180,17 @@ def run_bull_agent(brief):
         evidence.append(f"3-month return {brief['return_3m_pct']}% positive")
     return {
         "side": "bull",
+        "source": "deterministic",
         "evidence": evidence,
         "confidence": min(90, 30 + 20 * len(evidence)),
         "invalidation": "fast SMA closes below slow SMA",
     }
 
 
-def run_bear_agent(brief):
+def run_bear_agent(brief, cfg=None):
+    llm = run_llm_agent("bear", brief, cfg)
+    if llm is not None:
+        return {"side": "bear", "source": "llm", **llm}
     evidence = []
     if brief["trend"] == "down":
         evidence.append(f"fast SMA {brief['sma_fast']} below slow SMA {brief['sma_slow']} (downtrend)")
@@ -193,6 +202,7 @@ def run_bear_agent(brief):
         evidence.append(f"elevated volatility {brief['annualized_vol_pct']}%")
     return {
         "side": "bear",
+        "source": "deterministic",
         "evidence": evidence,
         "confidence": min(90, 30 + 20 * len(evidence)),
         "invalidation": "fast SMA closes above slow SMA with falling volatility",
@@ -419,8 +429,8 @@ def final_verdict(brief, bull, bear, debate, bt, review, risk_result, signal):
         "",
         f"- Data source: {brief['source']}" + (" **(SYNTHETIC)**" if brief["synthetic"] else ""),
         f"- Research: trend {brief['trend']}, RSI {brief['rsi14']}, vol {brief['annualized_vol_pct']}%",
-        f"- Bull confidence {bull['confidence']} — {'; '.join(bull['evidence']) or 'no evidence'}",
-        f"- Bear confidence {bear['confidence']} — {'; '.join(bear['evidence']) or 'no evidence'}",
+        f"- Bull ({bull['source']}) confidence {bull['confidence']} — {'; '.join(bull['evidence']) or 'no evidence'}",
+        f"- Bear ({bear['source']}) confidence {bear['confidence']} — {'; '.join(bear['evidence']) or 'no evidence'}",
         f"- Debate: {debate['memo']} -> {debate['recommendation']}",
         f"- Backtest in-sample: {bt['in_sample']}",
         f"- Backtest out-of-sample: {bt['out_of_sample']}",
@@ -454,7 +464,8 @@ def main():
     log_decision("RESEARCH", brief)
 
     print("4-6. Bull case, bear case, debate…")
-    bull, bear = run_bull_agent(brief), run_bear_agent(brief)
+    bull, bear = run_bull_agent(brief, cfg), run_bear_agent(brief, cfg)
+    print(f"     (bull: {bull['source']}, bear: {bear['source']})")
     debate = run_debate(bull, bear)
     log_decision("DEBATE", debate)
     if debate["recommendation"] == "REJECT":

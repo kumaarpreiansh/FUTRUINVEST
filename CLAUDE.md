@@ -42,8 +42,13 @@ backtests/       backtest outputs
 paper_trading/   simulated order log — the only "execution" that exists
 reports/         verdict memos
 logs/            decision log (JSONL)
+llm.py           optional Claude API layer for the bull/bear agents
 main.py          entry point — runs the whole pipeline, paper-only
 ```
+
+The bull/bear agents call Claude (`claude-opus-4-8`) when ANTHROPIC_API_KEY
+is set in `.env`, and fall back to deterministic stand-ins otherwise — keep
+that fallback so the pipeline always runs offline.
 
 ## Run it
 

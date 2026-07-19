@@ -1,6 +1,11 @@
 # Committee roster. Each role maps to agents/<role>/PROMPT.md.
-# Wiring these to an LLM API is optional — main.py runs a deterministic,
-# rule-based stand-in for each role so the pipeline works offline.
+# The bull and bear researchers call Claude (llm section below) when an
+# ANTHROPIC_API_KEY is set in .env; every role falls back to a
+# deterministic rule-based stand-in so the pipeline works offline.
+
+llm:
+  model: "claude-opus-4-8"
+  roles: [bull, bear]   # roles wired to real LLM calls
 
 roles:
   - researcher
