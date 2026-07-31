@@ -145,8 +145,36 @@ It runs two phases back to back:
    BUY above +0.15 when flat, SELL below -0.05 when long.
 
 The wallet is virtual and seeded with ₹100 by default; position sizing is
-whole shares only, capped by remaining cash. Useful flags: `--phase`
-(`both`/`backtest`/`live`), `--interval`, `--backtest-days`, `--broker`.
+whole shares only, capped by remaining cash *after* charges. Useful flags:
+`--phase` (`both`/`backtest`/`live`), `--interval`, `--backtest-days`,
+`--broker`, `--product`, `--slippage-bps`, `--no-costs`.
+
+### Transaction costs
+
+The backtest is not frictionless. Every leg pays slippage (5 bps each way by
+default, always against you) plus the real Indian charge stack — brokerage,
+STT, exchange turnover, SEBI, stamp duty, GST, and the per-scrip DP fee on
+delivery sells. Defaults follow Zerodha's published rates; **verify the
+current rate card before trusting any number**, since SEBI, the exchanges,
+and brokers all revise them.
+
+`--product delivery` (CNC) and `--product intraday` (MIS) are taxed very
+differently, and the report shows gross return, net return, and the drag
+between them so you can see what the friction actually took.
+
+This matters enormously at small account sizes. On a ₹100 wallet the ₹15.34
+DP fee on a single delivery sell is over 15% of capital before the strategy
+has been right or wrong about anything:
+
+```
+Gross return      -20.70%  (before charges and slippage)
+Net return        -51.81%
+Charges paid      ₹30.98
+Total friction    ₹31.11  (31.11 pts of return)
+```
+
+The run warns you when friction exceeds 10% of starting capital. Fixed costs
+do not scale down — at ₹100, the charges decide the outcome, not the signal.
 
 **Every live order stops for a typed Y/N.** The loop prints the full ticket —
 side, quantity, price, order value, rationale, the headlines behind it, and

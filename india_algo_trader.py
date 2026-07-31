@@ -132,6 +132,131 @@ def rupees(value: float) -> str:
     return f"₹{value:,.2f}"
 
 
+# ── Transaction costs ────────────────────────────────────────────────────────
+
+@dataclass
+class Charges:
+    """Statutory + broker charges on one executed leg, itemised."""
+
+    brokerage: float = 0.0
+    stt: float = 0.0
+    exchange: float = 0.0
+    sebi: float = 0.0
+    stamp_duty: float = 0.0
+    gst: float = 0.0
+    dp: float = 0.0
+
+    @property
+    def total(self) -> float:
+        return (self.brokerage + self.stt + self.exchange + self.sebi
+                + self.stamp_duty + self.gst + self.dp)
+
+    def breakdown(self) -> str:
+        parts = [
+            ("brokerage", self.brokerage), ("STT", self.stt),
+            ("exchange", self.exchange), ("SEBI", self.sebi),
+            ("stamp", self.stamp_duty), ("GST", self.gst), ("DP", self.dp),
+        ]
+        return ", ".join(f"{name} {rupees(value)}" for name, value in parts if value)
+
+
+@dataclass
+class CostModel:
+    """Indian equity transaction costs, defaulted to Zerodha's published rates.
+
+    Rates change — SEBI, the exchanges, and brokers all revise them. Treat
+    these as a starting point and check the current rate card before you read
+    anything into a backtest. Every field is overridable.
+
+    'delivery' (CNC) settles into the demat account; 'intraday' (MIS) squares
+    off the same session. They are taxed very differently: delivery pays STT
+    on both legs and a per-scrip DP fee on every sell, intraday pays STT on
+    the sell leg only but is charged brokerage.
+    """
+
+    profile: str = "delivery"
+    slippage_bps: float = 5.0          # half-spread + impact, each way
+
+    brokerage_pct: Optional[float] = None      # None -> profile default
+    brokerage_cap: float = 20.0                # rupees per executed order
+
+    stt_delivery_pct: float = 0.100            # both legs
+    stt_intraday_sell_pct: float = 0.025       # sell leg only
+    exchange_pct: float = 0.00297              # NSE equity turnover charge
+    sebi_pct: float = 0.0001                   # ₹10 per crore
+    stamp_delivery_buy_pct: float = 0.015      # buy leg only
+    stamp_intraday_buy_pct: float = 0.003      # buy leg only
+    gst_pct: float = 18.0                      # on brokerage + exchange + SEBI
+    dp_charge: float = 15.34                   # per scrip, per day, delivery sells
+
+    enabled: bool = True
+
+    def __post_init__(self):
+        if self.profile not in ("delivery", "intraday"):
+            raise ValueError("profile must be 'delivery' or 'intraday'")
+
+    @property
+    def is_intraday(self) -> bool:
+        return self.profile == "intraday"
+
+    def fill_price(self, side: str, price: float) -> float:
+        """Slippage always works against you: buys fill up, sells fill down."""
+        if not self.enabled or not self.slippage_bps:
+            return price
+        drift = price * (self.slippage_bps / 10_000.0)
+        return price + drift if side == "BUY" else price - drift
+
+    def _brokerage(self, turnover: float) -> float:
+        pct = self.brokerage_pct
+        if pct is None:
+            pct = 0.03 if self.is_intraday else 0.0  # Zerodha: delivery is free
+        return min(turnover * pct / 100.0, self.brokerage_cap) if pct else 0.0
+
+    def charges(self, side: str, quantity: int, price: float) -> Charges:
+        """Charges on one leg. `price` should already include slippage."""
+        if not self.enabled:
+            return Charges()
+
+        turnover = quantity * price
+        c = Charges()
+        c.brokerage = self._brokerage(turnover)
+
+        if self.is_intraday:
+            if side == "SELL":
+                c.stt = turnover * self.stt_intraday_sell_pct / 100.0
+            else:
+                c.stamp_duty = turnover * self.stamp_intraday_buy_pct / 100.0
+        else:
+            c.stt = turnover * self.stt_delivery_pct / 100.0
+            if side == "BUY":
+                c.stamp_duty = turnover * self.stamp_delivery_buy_pct / 100.0
+            else:
+                c.dp = self.dp_charge
+
+        c.exchange = turnover * self.exchange_pct / 100.0
+        c.sebi = turnover * self.sebi_pct / 100.0
+        c.gst = (c.brokerage + c.exchange + c.sebi) * self.gst_pct / 100.0
+        return c
+
+    def round_trip_estimate(self, quantity: int, price: float) -> float:
+        """What a buy and an immediate sell at the same price would cost."""
+        buy = self.fill_price("BUY", price)
+        sell = self.fill_price("SELL", price)
+        return (self.charges("BUY", quantity, buy).total
+                + self.charges("SELL", quantity, sell).total
+                + (buy - sell) * quantity)
+
+    def describe(self) -> str:
+        if not self.enabled:
+            return "costs OFF (frictionless — optimistic)"
+        return (f"{self.profile} · slippage {self.slippage_bps:g} bps/leg · "
+                f"Zerodha-style charges")
+
+    @classmethod
+    def free(cls) -> "CostModel":
+        return cls(slippage_bps=0.0, enabled=False)
+
+
 def now_ist() -> datetime:
     return datetime.now(IST)
 
@@ -363,43 +488,74 @@ class Fill:
     timestamp: datetime
     side: str
     quantity: int
-    price: float
-    realized: float = 0.0
+    price: float               # price actually filled at, slippage included
+    realized: float = 0.0      # net of charges on both legs
+    charges: float = 0.0
+    requested_price: float = 0.0
 
 
 class PaperWallet:
-    """Virtual cash + inventory ledger. Long-only, whole shares, no leverage."""
+    """Virtual cash + inventory ledger. Long-only, whole shares, no leverage.
 
-    def __init__(self, capital: float):
+    `avg_price` is the effective cost basis: the fill price plus the buy-side
+    charges spread over the shares. Realised PnL is therefore already net of
+    both legs' costs, and `equity()` needs no further adjustment because every
+    charge has already left `cash`.
+    """
+
+    def __init__(self, capital: float, costs: Optional[CostModel] = None):
         self.starting_capital = capital
         self.cash = capital
         self.quantity = 0
         self.avg_price = 0.0
         self.realized_pnl = 0.0
+        self.total_charges = 0.0
+        self.total_slippage = 0.0
+        self.costs = costs or CostModel.free()
         self.fills: list[Fill] = []
 
     # -- sizing -----------------------------------------------------------
 
+    def outlay_for(self, quantity: int, price: float) -> float:
+        """Total cash a buy of this size would consume, charges included."""
+        fill = self.costs.fill_price("BUY", price)
+        return quantity * fill + self.costs.charges("BUY", quantity, fill).total
+
     def affordable_quantity(self, price: float) -> int:
-        """Largest whole-share position the remaining cash can carry."""
+        """Largest whole-share position the cash can carry *after* charges."""
         if price <= 0:
             return 0
-        return int(self.cash // price)
+        fill = self.costs.fill_price("BUY", price)
+        if fill <= 0:
+            return 0
+
+        quantity = int(self.cash // fill)
+        # Charges are mostly proportional, so at most a share or two comes off.
+        while quantity > 0 and self.outlay_for(quantity, price) > self.cash + 1e-9:
+            quantity -= 1
+        return quantity
 
     # -- mutations --------------------------------------------------------
 
     def buy(self, quantity: int, price: float, when: Optional[datetime] = None) -> Fill:
-        cost = quantity * price
         if quantity <= 0:
             raise ValueError("buy quantity must be positive")
-        if cost > self.cash + 1e-9:
-            raise ValueError(f"insufficient cash: need {rupees(cost)}, have {rupees(self.cash)}")
 
-        self.avg_price = ((self.avg_price * self.quantity) + cost) / (self.quantity + quantity)
+        fill_price = self.costs.fill_price("BUY", price)
+        charges = self.costs.charges("BUY", quantity, fill_price).total
+        outlay = quantity * fill_price + charges
+        if outlay > self.cash + 1e-9:
+            raise ValueError(f"insufficient cash: need {rupees(outlay)}, have {rupees(self.cash)}")
+
+        basis = (self.avg_price * self.quantity) + (quantity * fill_price) + charges
         self.quantity += quantity
-        self.cash -= cost
+        self.avg_price = basis / self.quantity
+        self.cash -= outlay
+        self.total_charges += charges
+        self.total_slippage += (fill_price - price) * quantity
 
-        fill = Fill(when or now_ist(), "BUY", quantity, price)
+        fill = Fill(when or now_ist(), "BUY", quantity, fill_price,
+                    charges=charges, requested_price=price)
         self.fills.append(fill)
         return fill
 
@@ -409,14 +565,21 @@ class PaperWallet:
         if quantity > self.quantity:
             raise ValueError(f"cannot sell {quantity}, holding {self.quantity}")
 
-        realized = (price - self.avg_price) * quantity
+        fill_price = self.costs.fill_price("SELL", price)
+        charges = self.costs.charges("SELL", quantity, fill_price).total
+        proceeds = quantity * fill_price - charges
+
+        realized = proceeds - (self.avg_price * quantity)
         self.realized_pnl += realized
-        self.cash += quantity * price
+        self.cash += proceeds
         self.quantity -= quantity
+        self.total_charges += charges
+        self.total_slippage += (price - fill_price) * quantity
         if self.quantity == 0:
             self.avg_price = 0.0
 
-        fill = Fill(when or now_ist(), "SELL", quantity, price, realized)
+        fill = Fill(when or now_ist(), "SELL", quantity, fill_price, realized,
+                    charges=charges, requested_price=price)
         self.fills.append(fill)
         return fill
 
@@ -590,42 +753,70 @@ class BacktestResult:
     wins: int
     max_drawdown_pct: float
     never_affordable: bool
+    cost_label: str = ""
+    total_charges: float = 0.0
+    total_slippage: float = 0.0
+    gross_return_pct: float = 0.0
+
+    @property
+    def cost_drag_pct(self) -> float:
+        """How many percentage points of return the friction consumed."""
+        return self.gross_return_pct - self.return_pct
 
     def print_report(self) -> None:
+        friction = self.total_charges + self.total_slippage
         print("\n" + "─" * 68)
         print(f"  BACKTEST RESULT — {self.ticker}{NSE_SUFFIX}")
         print("─" * 68)
         print(f"  Window            {self.start:%Y-%m-%d} → {self.end:%Y-%m-%d} "
               f"({self.bars} hourly bars)")
         print(f"  Strategy          EMA({EMA_FAST}) / EMA({EMA_SLOW}) crossover, long-only")
+        print(f"  Cost model        {self.cost_label}")
         print(f"  Starting capital  {rupees(self.starting_capital)}")
         print(f"  Ending value      {rupees(self.ending_value)}")
+        print(f"  Gross return      {self.gross_return_pct:+.2f}%  (before charges and slippage)")
         print(f"  Net return        {self.return_pct:+.2f}%")
-        print(f"  Buy & hold        {self.buy_hold_pct:+.2f}%  (same window, for reference)")
-        print(f"  Round trips       {self.trades}  ({self.wins} profitable)")
+        print(f"  Charges paid      {rupees(self.total_charges)}")
+        print(f"  Slippage paid     {rupees(self.total_slippage)}")
+        print(f"  Total friction    {rupees(friction)}  "
+              f"({self.cost_drag_pct:.2f} pts of return)")
+        print(f"  Buy & hold        {self.buy_hold_pct:+.2f}%  (same window, gross)")
+        print(f"  Round trips       {self.trades}  ({self.wins} profitable after costs)")
         print(f"  Max drawdown      {self.max_drawdown_pct:.2f}%")
+
         if self.never_affordable:
             print(f"\n  ⚠ {rupees(self.starting_capital)} was never enough to buy a single "
                   f"share in this window,\n    so the strategy could not take a position. "
                   f"Pick a lower-priced ticker\n    or raise --capital to see the strategy trade.")
+        elif friction > 0 and self.starting_capital:
+            share = friction / self.starting_capital * 100
+            if share > 10:
+                print(f"\n  ⚠ Friction ate {share:.1f}% of starting capital. Fixed costs "
+                      f"(DP fees,\n    brokerage floors) do not scale down with a small "
+                      f"account — at this size\n    the charges, not the signal, decide "
+                      f"the outcome.")
         print("─" * 68)
 
 
 class BacktestEngine:
     """Replays the EMA crossover over historical hourly bars, bar by bar."""
 
-    def __init__(self, feed: MarketDataFeed, capital: float, days: int = BACKTEST_DAYS):
+    def __init__(self, feed: MarketDataFeed, capital: float, days: int = BACKTEST_DAYS,
+                 costs: Optional[CostModel] = None):
         self.feed = feed
         self.capital = capital
         self.days = days
+        self.costs = costs or CostModel.free()
 
     def run(self) -> BacktestResult:
         print(f"\n▶ Phase 1/2 — backtesting {self.feed.symbol} "
               f"over the last {self.days} days (hourly bars)…")
+        print(f"  costs: {self.costs.describe()}")
 
         bars = self.feed.historical_hourly(self.days)
         frame = crossover_signals(bars["Close"])
-        wallet = PaperWallet(self.capital)
+        wallet = PaperWallet(self.capital, self.costs)
+        frictionless = PaperWallet(self.capital, CostModel.free())
 
         equity_curve: list[float] = []
         never_affordable = True
@@ -640,13 +831,18 @@ class BacktestEngine:
             if row["signal"] == 1 and wallet.quantity == 0:
                 quantity = wallet.affordable_quantity(price)
                 if quantity > 0:
-                    wallet.buy(quantity, price, when)
-                    print(f"    {when:%Y-%m-%d %H:%M}  BUY  {quantity:>3} @ {rupees(price)}")
+                    fill = wallet.buy(quantity, price, when)
+                    # Same trade, no friction — isolates what the costs cost.
+                    frictionless.buy(quantity, price, when)
+                    print(f"    {when:%Y-%m-%d %H:%M}  BUY  {quantity:>3} @ "
+                          f"{rupees(fill.price)}   charges {rupees(fill.charges)}")
             elif row["signal"] == -1 and wallet.quantity > 0:
                 quantity = wallet.quantity
                 fill = wallet.sell(quantity, price, when)
-                print(f"    {when:%Y-%m-%d %H:%M}  SELL {quantity:>3} @ {rupees(price)}"
-                      f"   pnl {rupees(fill.realized)}")
+                frictionless.sell(quantity, price, when)
+                print(f"    {when:%Y-%m-%d %H:%M}  SELL {quantity:>3} @ "
+                      f"{rupees(fill.price)}   charges {rupees(fill.charges)}"
+                      f"   net pnl {rupees(fill.realized)}")
 
             equity_curve.append(wallet.equity(price))
 
@@ -673,6 +869,10 @@ class BacktestEngine:
             wins=sum(1 for f in sells if f.realized > 0),
             max_drawdown_pct=drawdown,
             never_affordable=never_affordable,
+            cost_label=self.costs.describe(),
+            total_charges=wallet.total_charges,
+            total_slippage=wallet.total_slippage,
+            gross_return_pct=frictionless.return_pct(last_price),
         )
 
 
@@ -734,9 +934,17 @@ class TradeConfirmation:
         print("\n" + "=" * 68)
         print("  ⚠  MANUAL CONFIRMATION REQUIRED — no order is placed automatically")
         print("=" * 68)
+        costs = wallet.costs
+        fill_price = costs.fill_price(order.side, order.price)
+        charges = costs.charges(order.side, order.quantity, fill_price)
+
         print(f"  Action        {order.side} {order.quantity} x {order.symbol} ({order.exchange})")
-        print(f"  Price         {rupees(order.price)}   ({order.order_type}, {order.product})")
-        print(f"  Order value   {rupees(order.value)}")
+        print(f"  Last price    {rupees(order.price)}   ({order.order_type}, {order.product})")
+        print(f"  Est. fill     {rupees(fill_price)}   "
+              f"(after {costs.slippage_bps:g} bps slippage)")
+        print(f"  Order value   {rupees(order.quantity * fill_price)}")
+        if charges.total:
+            print(f"  Est. charges  {rupees(charges.total)}   ({charges.breakdown()})")
         print(f"  Rationale     {order.reason}")
         print(f"  Sentiment     {reading.score:+.3f} from {reading.matched} headline(s)")
         for item in reading.items[:3]:
@@ -744,12 +952,15 @@ class TradeConfirmation:
         print(f"  Wallet before cash {rupees(wallet.cash)}, qty {wallet.quantity} "
               f"@ {rupees(wallet.avg_price)}")
         if order.side == "BUY":
-            print(f"  Wallet after  cash {rupees(wallet.cash - order.value)}, "
-                  f"qty {wallet.quantity + order.quantity}")
+            outlay = order.quantity * fill_price + charges.total
+            print(f"  Wallet after  cash {rupees(wallet.cash - outlay)}, "
+                  f"qty {wallet.quantity + order.quantity}   "
+                  f"(total outlay {rupees(outlay)})")
         else:
-            realized = (order.price - wallet.avg_price) * order.quantity
-            print(f"  Wallet after  cash {rupees(wallet.cash + order.value)}, qty 0"
-                  f"   (realising {rupees(realized)})")
+            proceeds = order.quantity * fill_price - charges.total
+            realized = proceeds - (wallet.avg_price * order.quantity)
+            print(f"  Wallet after  cash {rupees(wallet.cash + proceeds)}, qty 0"
+                  f"   (realising {rupees(realized)} net of charges)")
         print("=" * 68)
 
         if not sys.stdin.isatty():
@@ -900,6 +1111,12 @@ def parse_args(argv=None) -> argparse.Namespace:
                         help="order sink; the live adapters are scaffolds and do not execute")
     parser.add_argument("--phase", default="both", choices=("both", "backtest", "live"),
                         help="which phases to run")
+    parser.add_argument("--product", default="delivery", choices=("delivery", "intraday"),
+                        help="CNC delivery or MIS intraday — they are taxed differently")
+    parser.add_argument("--slippage-bps", type=float, default=5.0,
+                        help="assumed slippage per leg, in basis points")
+    parser.add_argument("--no-costs", action="store_true",
+                        help="run frictionless (optimistic; useful only for comparison)")
     return parser.parse_args(argv)
 
 
@@ -918,9 +1135,12 @@ def main(argv=None) -> int:
         print(f"⛔ could not initialise the data feed: {exc}")
         return 1
 
+    costs = (CostModel.free() if args.no_costs
+             else CostModel(profile=args.product, slippage_bps=args.slippage_bps))
+
     if args.phase in ("both", "backtest"):
         try:
-            BacktestEngine(feed, args.capital, args.backtest_days).run().print_report()
+            BacktestEngine(feed, args.capital, args.backtest_days, costs).run().print_report()
         except DataUnavailable as exc:
             print(f"⛔ backtest aborted: {exc}")
             return 1
@@ -943,7 +1163,7 @@ def main(argv=None) -> int:
     trader = LiveTrader(
         feed=feed,
         sentiment=sentiment,
-        wallet=PaperWallet(args.capital),
+        wallet=PaperWallet(args.capital, costs),
         broker=build_broker(args.broker),
         strategy=HybridStrategy(),
         interval=args.interval,

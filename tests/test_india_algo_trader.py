@@ -81,6 +81,133 @@ class TestPaperWallet(unittest.TestCase):
         self.assertAlmostEqual(wallet.return_pct(30.0), 20.0)
 
 
+class TestCostModel(unittest.TestCase):
+    def test_slippage_always_works_against_you(self):
+        costs = iat.CostModel(slippage_bps=100.0)  # 1%
+        self.assertAlmostEqual(costs.fill_price("BUY", 100.0), 101.0)
+        self.assertAlmostEqual(costs.fill_price("SELL", 100.0), 99.0)
+
+    def test_free_model_is_frictionless(self):
+        costs = iat.CostModel.free()
+        self.assertEqual(costs.fill_price("BUY", 100.0), 100.0)
+        self.assertEqual(costs.charges("BUY", 10, 100.0).total, 0.0)
+
+    def test_delivery_pays_stt_on_both_legs(self):
+        costs = iat.CostModel(profile="delivery")
+        self.assertGreater(costs.charges("BUY", 100, 100.0).stt, 0)
+        self.assertGreater(costs.charges("SELL", 100, 100.0).stt, 0)
+
+    def test_intraday_pays_stt_on_the_sell_leg_only(self):
+        costs = iat.CostModel(profile="intraday")
+        self.assertEqual(costs.charges("BUY", 100, 100.0).stt, 0.0)
+        self.assertGreater(costs.charges("SELL", 100, 100.0).stt, 0)
+
+    def test_delivery_sell_pays_a_flat_dp_fee(self):
+        costs = iat.CostModel(profile="delivery")
+        self.assertAlmostEqual(costs.charges("SELL", 1, 50.0).dp, costs.dp_charge)
+        self.assertEqual(costs.charges("BUY", 1, 50.0).dp, 0.0)
+        # The DP fee is flat, so it dominates a tiny trade.
+        self.assertGreater(costs.charges("SELL", 1, 50.0).total, 15.0)
+
+    def test_intraday_pays_brokerage_capped_at_twenty(self):
+        costs = iat.CostModel(profile="intraday")
+        self.assertAlmostEqual(costs.charges("BUY", 10, 100.0).brokerage, 0.30)
+        self.assertAlmostEqual(costs.charges("BUY", 10000, 1000.0).brokerage, 20.0)
+
+    def test_delivery_brokerage_is_free(self):
+        costs = iat.CostModel(profile="delivery")
+        self.assertEqual(costs.charges("BUY", 100, 100.0).brokerage, 0.0)
+
+    def test_gst_applies_only_to_brokerage_exchange_and_sebi(self):
+        costs = iat.CostModel(profile="intraday")
+        c = costs.charges("BUY", 100, 100.0)
+        self.assertAlmostEqual(c.gst, (c.brokerage + c.exchange + c.sebi) * 0.18)
+
+    def test_round_trip_estimate_is_positive(self):
+        costs = iat.CostModel(profile="delivery", slippage_bps=5.0)
+        self.assertGreater(costs.round_trip_estimate(2, 50.0), 0)
+
+    def test_rejects_unknown_profile(self):
+        with self.assertRaises(ValueError):
+            iat.CostModel(profile="futures")
+
+
+class TestWalletWithCosts(unittest.TestCase):
+    def setUp(self):
+        self.costs = iat.CostModel(profile="delivery", slippage_bps=10.0)
+
+    def test_sizing_reserves_cash_for_charges(self):
+        """The sizing must never produce a buy the wallet cannot pay for."""
+        for price in (7.0, 19.0, 23.5, 47.25, 99.0):
+            wallet = iat.PaperWallet(100.0, self.costs)
+            quantity = wallet.affordable_quantity(price)
+            if quantity:
+                wallet.buy(quantity, price)
+                self.assertGreaterEqual(wallet.cash, -1e-9,
+                                        f"cash went negative at price {price}")
+
+    def test_buy_deducts_charges_and_slips_the_fill(self):
+        wallet = iat.PaperWallet(1000.0, self.costs)
+        fill = wallet.buy(2, 100.0)
+        self.assertGreater(fill.price, 100.0)           # slipped up
+        self.assertGreater(fill.charges, 0.0)
+        self.assertLess(wallet.cash, 1000.0 - 200.0)    # paid more than notional
+        self.assertGreater(wallet.avg_price, fill.price)  # basis includes charges
+
+    def test_flat_round_trip_loses_exactly_the_friction(self):
+        wallet = iat.PaperWallet(1000.0, self.costs)
+        wallet.buy(5, 100.0)
+        wallet.sell(5, 100.0)
+        self.assertLess(wallet.realized_pnl, 0.0)
+        self.assertAlmostEqual(wallet.cash, 1000.0 + wallet.realized_pnl, places=6)
+        expected = self.costs.round_trip_estimate(5, 100.0)
+        self.assertAlmostEqual(-wallet.realized_pnl, expected, places=6)
+
+    def test_charges_and_slippage_are_tracked_separately(self):
+        wallet = iat.PaperWallet(1000.0, self.costs)
+        wallet.buy(5, 100.0)
+        wallet.sell(5, 100.0)
+        self.assertGreater(wallet.total_charges, 0.0)
+        self.assertGreater(wallet.total_slippage, 0.0)
+
+    def test_frictionless_wallet_matches_the_old_behaviour(self):
+        wallet = iat.PaperWallet(100.0)
+        self.assertEqual(wallet.affordable_quantity(33.0), 3)
+        wallet.buy(3, 20.0)
+        self.assertAlmostEqual(wallet.cash, 40.0)
+        wallet.sell(3, 25.0)
+        self.assertAlmostEqual(wallet.realized_pnl, 15.0)
+        self.assertEqual(wallet.total_charges, 0.0)
+
+
+class TestBacktestCosts(unittest.TestCase):
+    def test_costs_reduce_return_versus_frictionless(self):
+        closes = list(range(20, 60)) + list(range(60, 20, -1)) + list(range(20, 60))
+        feed = FakeFeed(closes)
+        costed = iat.BacktestEngine(
+            feed, 5000.0, costs=iat.CostModel(profile="delivery", slippage_bps=10.0)
+        ).run()
+        self.assertGreater(costed.total_charges, 0.0)
+        self.assertGreater(costed.total_slippage, 0.0)
+        self.assertLess(costed.return_pct, costed.gross_return_pct)
+        self.assertAlmostEqual(costed.cost_drag_pct,
+                               costed.gross_return_pct - costed.return_pct)
+
+    def test_frictionless_run_reports_no_drag(self):
+        closes = list(range(20, 60)) + list(range(60, 20, -1)) + list(range(20, 60))
+        result = iat.BacktestEngine(FakeFeed(closes), 5000.0, costs=iat.CostModel.free()).run()
+        self.assertEqual(result.total_charges, 0.0)
+        self.assertEqual(result.total_slippage, 0.0)
+        self.assertAlmostEqual(result.cost_drag_pct, 0.0, places=6)
+
+    def test_intraday_and_delivery_differ(self):
+        closes = list(range(20, 60)) + list(range(60, 20, -1)) + list(range(20, 60))
+        feed = FakeFeed(closes)
+        delivery = iat.BacktestEngine(feed, 5000.0, costs=iat.CostModel("delivery")).run()
+        intraday = iat.BacktestEngine(feed, 5000.0, costs=iat.CostModel("intraday")).run()
+        self.assertNotAlmostEqual(delivery.total_charges, intraday.total_charges)
+
+
 class TestIndicators(unittest.TestCase):
     def test_crossover_marks_both_directions(self):
         # Rise through the warm-up, then fall (death cross), then rise (golden cross).
