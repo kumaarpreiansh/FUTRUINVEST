@@ -125,6 +125,36 @@ into each layer (verify each repo, license, and README yourself before use):
 - **[Jesse](https://github.com/jesse-ai/jesse)** — crypto backtesting + paper trading (MIT; keep live OFF)
 - **[Qlib](https://github.com/microsoft/qlib)** — quant/risk research (MIT)
 
+## india_algo_trader.py — NSE terminal (standalone)
+
+A self-contained companion script for the Indian market that runs on a
+zero-cost data stack — no Kite subscription, no paid feeds.
+
+```bash
+pip install yfinance pandas nltk beautifulsoup4 requests
+python india_algo_trader.py --ticker SUZLON --capital 100
+```
+
+It runs two phases back to back:
+
+1. **Backtest** — 30 days of hourly bars from yfinance, EMA(9)/EMA(21)
+   crossover, simulated fills, then a performance summary with a buy-and-hold
+   reference and max drawdown.
+2. **Live paper trading** — 1-minute bars on a 60-second loop, VADER sentiment
+   over Moneycontrol and Economic Times RSS filtered to the active ticker.
+   BUY above +0.15 when flat, SELL below -0.05 when long.
+
+The wallet is virtual and seeded with ₹100 by default; position sizing is
+whole shares only, capped by remaining cash. Useful flags: `--phase`
+(`both`/`backtest`/`live`), `--interval`, `--backtest-days`, `--broker`.
+
+**Every live order stops for a typed Y/N.** The loop prints the full ticket —
+side, quantity, price, order value, rationale, the headlines behind it, and
+the wallet before and after — then waits. Nothing reaches the wallet without
+approval, and a non-interactive stdin counts as "no". The `AngelOneBroker` and
+`FyersBroker` adapters build their vendor payloads so you can verify the field
+mapping, but refuse to execute: live routing stays disabled here.
+
 ## Tests
 
 ```bash
