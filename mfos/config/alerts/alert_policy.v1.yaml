@@ -1,0 +1,86 @@
+# Alert Engine policy — what may interrupt an investor, and how often.
+#
+# The default answer to "should we notify?" is NO. Every alert must survive
+# a materiality test, a de-duplication window and a per-investor budget.
+
+ruleset:
+  id: "alerts.v1"
+  version: "1.0.0"
+  published_on: "2026-08-25"
+  owner: "product"
+
+severities:
+  RED:
+    label: "Material change detected"
+    channel: ["push", "in_app", "email"]
+    cadence: "IMMEDIATE"
+    requires: ["material_event == true"]
+    max_per_investor_per_month: 4
+  ORANGE:
+    label: "Requires review"
+    channel: ["in_app", "email"]
+    cadence: "DAILY_DIGEST"
+    max_per_investor_per_month: 6
+  YELLOW:
+    label: "Off target"
+    channel: ["in_app"]
+    cadence: "DAILY_DIGEST"
+    max_per_investor_per_month: 8
+  BLUE:
+    label: "Progress"
+    channel: ["in_app"]
+    cadence: "WEEKLY_DIGEST"
+    max_per_investor_per_month: 6
+  GREEN:
+    label: "On track"
+    channel: ["in_app"]
+    cadence: "WEEKLY_DIGEST"
+    max_per_investor_per_month: 4
+  EDUCATION:
+    label: "Learn"
+    channel: ["in_app"]
+    cadence: "OPTIONAL"
+    default_opt_in: false
+    max_per_investor_per_month: 4
+
+# Global budget across all severities. Hard ceiling; RED is exempt.
+budget:
+  max_notifications_per_week: 3
+  max_notifications_per_month: 8
+  quiet_hours_local: {start: "21:30", end: "08:00"}
+  quiet_hours_exempt: ["RED"]
+  suppress_duplicate_within_days: 30
+  suppress_same_holding_within_days: 14
+
+# Every alert must be able to fill all of these. Missing field => not sent.
+required_fields:
+  - "what_happened"
+  - "why_it_matters"
+  - "confidence"
+  - "recommended_action"
+  - "urgency"
+  - "tax_implication"       # may be "none" but must be stated
+  - "if_you_do_nothing"
+  - "sources"
+
+# Market-movement alerts are governed separately and are intentionally hostile
+# to reactivity.
+market_movement:
+  notify_on_index_move: false
+  notify_on_portfolio_drawdown: false
+  reassurance_on_drawdown:
+    enabled: true
+    trigger_drawdown_pct: 15
+    max_per_quarter: 1
+    tone: "context"
+    content_rule: >
+      Must state that nothing in the investor's plan has changed, show goal
+      probability before and after, and must NOT contain a call to transact.
+
+prohibited_alert_patterns:
+  - "artificial urgency ('act now', 'last chance', 'only today')"
+  - "fear framing ('markets crashing', 'protect your money now')"
+  - "FOMO framing ('investors are piling into', 'don't miss out')"
+  - "return leaderboards or peer-comparison of returns between investors"
+  - "streak mechanics tied to transacting"
+  - "any notification whose recommended_action is 'transact' without a signal >= REVIEW"

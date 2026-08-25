@@ -1,0 +1,102 @@
+# Fund scoring methodology — data, not code. See docs/F-FUND-SCORING-METHODOLOGY.md.
+#
+# A fund score is NOT a buy signal. It answers "how good is this fund at what it
+# claims to do, relative to its SEBI category peers". Suitability is scored
+# separately, per investor, and can veto a high-scoring fund entirely.
+
+ruleset:
+  id: "scoring.fund"
+  version: "1.0.0"
+  published_on: "2026-08-25"
+  owner: "investment-research"
+  peer_group: "SEBI_CATEGORY"          # never cross-category
+  min_peers_for_percentile: 8
+  min_history_months: 36
+
+# Five published pillars. Weights must sum to 100 (validated on load).
+pillars:
+  consistency:
+    weight: 30
+    description: "Does it beat its own benchmark repeatedly, not once?"
+    components:
+      rolling_outperformance_rate_3y: 40   # % of rolling 3y windows beating benchmark
+      rolling_outperformance_rate_5y: 30
+      return_rank_stability: 20            # dispersion of quartile rank over time
+      benchmark_excess_cagr: 10
+  risk:
+    weight: 25
+    description: "What was endured to get the return?"
+    components:
+      sharpe_percentile: 25
+      sortino_percentile: 25
+      max_drawdown_percentile: 25          # shallower is better
+      downside_capture_percentile: 15      # lower is better
+      volatility_percentile: 10            # lower is better
+  cost:
+    weight: 15
+    description: "Cost is the only input known with certainty in advance."
+    components:
+      expense_ratio_percentile: 70         # lower is better, vs category
+      exit_load_burden: 15
+      plan_type_penalty: 15                # Regular plan penalised vs Direct
+  quality:
+    weight: 20
+    description: "Portfolio and process, not outcome."
+    components:
+      manager_tenure: 25
+      manager_stability: 15                # count of changes in lookback
+      portfolio_concentration: 20          # top-10 weight vs category norm
+      aum_adequacy: 20                     # too small = fragile, too large = capacity risk
+      turnover_reasonableness: 10
+      mandate_drift: 10                    # actual exposure vs stated category
+  tracking:
+    weight: 10
+    description: "For passive funds this dominates; for active funds it is informational."
+    components:
+      tracking_error_percentile: 60
+      tracking_difference: 40
+
+# Passive schemes are scored on a different weight map — judging an index fund
+# on 'alpha consistency' is a category error.
+overrides:
+  passive:
+    applies_when:
+      management_style: "PASSIVE"
+    pillars:
+      consistency: 10
+      risk: 20
+      cost: 30
+      quality: 10
+      tracking: 30
+
+# Score bands used in the UI. Bands, not false precision.
+bands:
+  - {min: 85, label: "Strong",        colour: "green"}
+  - {min: 70, label: "Above average", colour: "blue"}
+  - {min: 55, label: "Average",       colour: "grey"}
+  - {min: 40, label: "Below average", colour: "amber"}
+  - {min: 0,  label: "Weak",          colour: "red"}
+
+# Hard rules that bypass the weighted score entirely.
+disqualifiers:
+  - id: "DQ-DATA-QUALITY"
+    when: "data_quality_score < 70"
+    effect: "NOT_SCORED"
+    message: "Insufficient verified data to score this scheme."
+  - id: "DQ-HISTORY"
+    when: "history_months < 36"
+    effect: "PROVISIONAL"
+    message: "Scored provisionally; under 3 years of history."
+
+# Explicitly excluded inputs, named as the fields actually exist on the scheme
+# record so the exclusion is checkable rather than aspirational. Enforced by
+# tests/test_funds_and_selection.py::test_no_commission_influence_on_ranking,
+# which re-scores the whole universe with these fields perturbed and asserts
+# that not one score moves.
+prohibited_inputs:
+  - "distributor_commission_pct"
+  - "amc_relationship"
+  - "amc_revenue_share"
+  - "platform_margin"
+  - "campaign_flag"
+  - "marketing_spend"

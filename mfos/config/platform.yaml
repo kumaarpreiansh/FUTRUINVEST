@@ -1,0 +1,79 @@
+# platform.yaml — global switches for the MF Investment Operating System.
+#
+# Everything here is data, not code. Nothing in src/mfos hard-codes a
+# regulatory fact, a tax rate, a threshold or a disclosure string.
+
+platform:
+  name: "FUTRUINVEST MF Investment OS"
+  build_stage: "pre-launch"          # pre-launch | pilot | production
+  jurisdiction: "IN"
+  base_currency: "INR"
+
+# ── Regulatory posture ──────────────────────────────────────────────────────
+# The platform must NOT describe itself as a SEBI-registered Investment
+# Adviser until a registration number is actually issued and recorded here.
+regulatory:
+  entity_legal_name: "<NOT SET>"
+  sebi_ia_registration_number: null      # null => the app must not claim IA status
+  sebi_ia_registration_verified: false
+  amfi_arn: null                          # distribution ARN, if the model uses one
+  bse_star_mf_member: false
+  operating_model: "UNDETERMINED"         # UNDETERMINED | IA_ADVISORY | EXECUTION_ONLY_DISTRIBUTOR
+  # LEGAL REVIEW REQUIRED: the operating model decides which features may ship.
+  # See docs/I-COMPLIANCE-ARCHITECTURE.md and docs/LEGAL-REVIEW-REGISTER.md.
+
+# ── Hard product gates. These are checked at start-up and per recommendation.
+gates:
+  personalised_advice_enabled: false   # requires operating_model == IA_ADVISORY
+  execution_enabled: false             # requires regulated execution rails + consent
+  auto_execution_enabled: false        # MUST stay false. No AI-initiated transactions.
+  withdrawals_enabled: false           # MUST stay false in this repository.
+  commission_influences_ranking: false # MUST stay false. Enforced by test.
+  allow_unverified_data_in_recommendation: false
+  allow_llm_generated_numbers: false   # MUST stay false. LLM never produces figures.
+
+# ── Quality floors: below these the pipeline halts rather than guesses. ─────
+thresholds:
+  min_data_quality_score: 70          # 0-100, per fund, see funds.py
+  max_data_staleness_hours:
+    nav: 30
+    portfolio_holdings: 1200          # monthly disclosure cycle + slack
+    expense_ratio: 800
+    regulatory_rule: 720
+  min_recommendation_confidence: 55   # below this => "insufficient basis", ask, don't advise
+  human_review_confidence_below: 65
+  human_review_amount_inr: 1000000    # escalate large actions to a qualified human
+  min_history_months_for_scoring: 36
+  min_history_months_for_switch: 60
+
+# ── Active rule-set versions. Bump deliberately; every audit row stores these.
+rulesets:
+  tax: "config/tax/tax_rules.IN.v2026-27.yaml"
+  compliance: "config/compliance/regulatory_rules.v1.yaml"
+  fund_scoring: "config/scoring/fund_scoring.v1.yaml"
+  allocation: "config/allocation/allocation_policy.v1.yaml"
+  signals: "config/signals/signal_rules.v1.yaml"
+  alerts: "config/alerts/alert_policy.v1.yaml"
+  ai_models: "config/ai/model_registry.yaml"
+
+# ── Language control. Enforced by compliance.check_language(). ──────────────
+prohibited_language:
+  - "guaranteed return"
+  - "guaranteed returns"
+  - "assured return"
+  - "assured returns"
+  - "risk-free"
+  - "risk free"
+  - "guaranteed wealth"
+  - "guaranteed corpus"
+  - "certain return"
+  - "sure shot"
+  - "no downside"
+  - "cannot lose"
+  - "will definitely"
+  - "multibagger"
+
+mandatory_disclaimer_ids:
+  - "DISC-MF-RISK-001"
+  - "DISC-PAST-PERF-001"
+  - "DISC-PROJECTION-001"

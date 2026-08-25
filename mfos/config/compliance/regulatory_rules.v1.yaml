@@ -1,0 +1,317 @@
+# Version-controlled regulatory rule repository.
+#
+# The compliance engine reads ONLY this file. No regulatory fact lives in code.
+# Every rule is traceable: rule_id -> source -> effective date -> system impact.
+#
+# verification_status has the same meaning as in the tax rule-set:
+#   VERIFIED_PRIMARY | VERIFIED_SECONDARY | UNVERIFIED
+# A rule that is UNVERIFIED can still BLOCK a feature (fail-closed) but can
+# never be used to justify ALLOWING one.
+
+ruleset:
+  id: "compliance.IN"
+  version: "1.0.0"
+  jurisdiction: "IN"
+  published_on: "2026-08-25"
+  owner: "compliance"
+  review_cadence_days: 30
+  fail_mode: "CLOSED"   # unknown/expired rule => block the regulated behaviour
+
+rules:
+
+  # ── Advisory / registration ───────────────────────────────────────────────
+  - rule_id: "SEBI-IA-REG-001"
+    title: "Personalised investment advice requires SEBI Investment Adviser registration"
+    domain: "ADVISORY"
+    source: "SEBI (Investment Advisers) Regulations, 2013 (as amended)"
+    source_url: "https://www.sebi.gov.in/legal/regulations/aug-2025/securities-and-exchange-board-of-india-investment-advisers-regulations-2013-last-amended-on-august-7-2025-_96112.html"
+    effective_from: "2013-01-21"
+    effective_to: null
+    applicable_product: ["MUTUAL_FUND"]
+    applicable_investor_type: ["INDIVIDUAL", "HUF", "NRI"]
+    system_impact:
+      - "Gate: gates.personalised_advice_enabled requires regulatory.sebi_ia_registration_verified == true."
+      - "Until then the platform may only present education, analytics and non-personalised information."
+    enforcement: "BLOCK"
+    control_id: "CTRL-ADVICE-GATE"
+    verification_status: "VERIFIED_SECONDARY"
+    legal_review_required: true
+    compliance_status: "NOT_MET"
+
+  - rule_id: "SEBI-IA-CONSENT-001"
+    title: "An Investment Adviser cannot execute a transaction on behalf of a client without specific consent for each transaction"
+    domain: "EXECUTION"
+    source: "SEBI (Investment Advisers) Regulations, 2013 read with SEBI guidelines for Investment Advisers; Most Important Terms and Conditions (MITC) requirement"
+    source_url: "https://www.sebi.gov.in/legal/regulations/aug-2025/securities-and-exchange-board-of-india-investment-advisers-regulations-2013-last-amended-on-august-7-2025-_96112.html"
+    effective_from: "2024-12-16"
+    effective_to: null
+    applicable_product: ["MUTUAL_FUND"]
+    applicable_investor_type: ["ALL"]
+    system_impact:
+      - "Execution engine requires a per-transaction consent token bound to the exact scheme, amount, direction and timestamp."
+      - "gates.auto_execution_enabled MUST remain false."
+      - "Consent capture must be timestamped and retained for the audit trail."
+    enforcement: "BLOCK"
+    control_id: "CTRL-PER-TXN-CONSENT"
+    verification_status: "VERIFIED_SECONDARY"
+    legal_review_required: true
+    compliance_status: "MET_BY_DESIGN"
+
+  - rule_id: "SEBI-IA-SUITABILITY-001"
+    title: "Advice must be suitable for the client following risk profiling"
+    domain: "ADVISORY"
+    source: "SEBI (Investment Advisers) Regulations, 2013 — risk profiling and suitability obligations"
+    source_url: "https://www.sebi.gov.in/legal/regulations/aug-2025/securities-and-exchange-board-of-india-investment-advisers-regulations-2013-last-amended-on-august-7-2025-_96112.html"
+    effective_from: "2013-01-21"
+    effective_to: null
+    applicable_product: ["MUTUAL_FUND"]
+    applicable_investor_type: ["ALL"]
+    system_impact:
+      - "Recommendation pipeline halts if the profile is stale or incomplete on any field the recommendation depends on."
+      - "SUITABILITY OVERRIDES PERFORMANCE: a higher-scoring fund that fails suitability is removed, not down-ranked."
+    enforcement: "BLOCK"
+    control_id: "CTRL-SUITABILITY"
+    verification_status: "VERIFIED_SECONDARY"
+    legal_review_required: true
+    compliance_status: "MET_BY_DESIGN"
+
+  - rule_id: "SEBI-IA-CONFLICT-001"
+    title: "Segregation of advisory from distribution; disclosure of conflicts of interest"
+    domain: "CONFLICT"
+    source: "SEBI (Investment Advisers) Regulations, 2013 — segregation and disclosure obligations"
+    source_url: "https://www.sebi.gov.in/legal/regulations/aug-2025/securities-and-exchange-board-of-india-investment-advisers-regulations-2013-last-amended-on-august-7-2025-_96112.html"
+    effective_from: "2013-01-21"
+    effective_to: null
+    applicable_product: ["MUTUAL_FUND"]
+    applicable_investor_type: ["ALL"]
+    system_impact:
+      - "gates.commission_influences_ranking MUST remain false; enforced by an automated test that re-ranks with commissions zeroed and asserts the ordering is unchanged."
+      - "Any commercial relationship with an AMC must be attached to every recommendation that names its scheme."
+    enforcement: "BLOCK"
+    control_id: "CTRL-NO-COMMISSION-RANKING"
+    verification_status: "VERIFIED_SECONDARY"
+    legal_review_required: true
+    compliance_status: "MET_BY_DESIGN"
+
+  - rule_id: "SEBI-IA-FEE-001"
+    title: "Investment Adviser fee limits and permitted fee modes"
+    domain: "FEES"
+    source: "LEGAL REVIEW REQUIRED — fee caps and modes are prescribed and have been amended"
+    source_url: "https://www.sebi.gov.in/"
+    effective_from: null
+    effective_to: null
+    applicable_product: ["ADVISORY_SERVICE"]
+    applicable_investor_type: ["ALL"]
+    system_impact:
+      - "Billing module must read caps from this rule. Until verified, billing is disabled."
+    enforcement: "BLOCK"
+    control_id: "CTRL-FEE-CAP"
+    verification_status: "UNVERIFIED"
+    legal_review_required: true
+    compliance_status: "NOT_MET"
+
+  # ── Product / scheme rules ────────────────────────────────────────────────
+  - rule_id: "SEBI-MF-CATEGORY-001"
+    title: "Categorisation and rationalisation of mutual fund schemes"
+    domain: "PRODUCT"
+    source: "SEBI circular on Categorization and Rationalization of Mutual Fund Schemes (October 2017) and subsequent amendments"
+    source_url: "https://www.amfiindia.com/investor/knowledge-center-info?zoneName=CategorizationOfMutualFundSchemes"
+    effective_from: "2017-10-06"
+    effective_to: null
+    applicable_product: ["MUTUAL_FUND"]
+    applicable_investor_type: ["ALL"]
+    reference_data:
+      broad_categories: ["EQUITY", "DEBT", "HYBRID", "SOLUTION_ORIENTED", "OTHER"]
+      market_cap_definition:
+        LARGE_CAP: "1st-100th company by full market capitalisation"
+        MID_CAP: "101st-250th company by full market capitalisation"
+        SMALL_CAP: "251st company onwards by full market capitalisation"
+      note: "AMFI publishes the half-yearly classification list. The platform must ingest that list rather than derive the ranking itself."
+    system_impact:
+      - "Peer comparison must be within SEBI category. Cross-category ranking is prohibited in the UI."
+      - "Category floors (e.g. minimum equity exposure for a category) are ingested per-category, not assumed."
+    enforcement: "WARN"
+    control_id: "CTRL-PEER-GROUP"
+    verification_status: "VERIFIED_SECONDARY"
+    legal_review_required: true
+    compliance_status: "MET_BY_DESIGN"
+
+  - rule_id: "AMFI-PLAN-DIRECT-REGULAR-001"
+    title: "Direct and Regular plans share the same portfolio but differ in expense structure"
+    domain: "DISCLOSURE"
+    source: "AMFI investor knowledge centre"
+    source_url: "https://www.amfiindia.com/"
+    effective_from: "2013-01-01"
+    effective_to: null
+    applicable_product: ["MUTUAL_FUND"]
+    applicable_investor_type: ["ALL"]
+    system_impact:
+      - "Whenever a scheme is shown, the plan (Direct/Regular) must be shown with it."
+      - "Cost comparison screen must show the long-term cost difference in rupees, not only as a percentage."
+    enforcement: "REQUIRE_DISCLOSURE"
+    control_id: "CTRL-PLAN-DISCLOSURE"
+    verification_status: "VERIFIED_SECONDARY"
+    legal_review_required: false
+    compliance_status: "MET_BY_DESIGN"
+
+  - rule_id: "SEBI-MF-RISKOMETER-001"
+    title: "Risk-o-meter disclosure for mutual fund schemes"
+    domain: "DISCLOSURE"
+    source: "SEBI product labelling / risk-o-meter requirements for mutual fund schemes"
+    source_url: "https://www.sebi.gov.in/"
+    effective_from: "2021-01-01"
+    effective_to: null
+    applicable_product: ["MUTUAL_FUND"]
+    applicable_investor_type: ["ALL"]
+    system_impact:
+      - "Riskometer band is displayed on every scheme card and carried into the audit snapshot."
+      - "A recommendation whose riskometer band exceeds the investor's permitted band is blocked by suitability."
+    enforcement: "REQUIRE_DISCLOSURE"
+    control_id: "CTRL-RISKOMETER"
+    verification_status: "VERIFIED_SECONDARY"
+    legal_review_required: true
+    compliance_status: "MET_BY_DESIGN"
+
+  # ── Communication / advertising ───────────────────────────────────────────
+  - rule_id: "COMM-NO-GUARANTEE-001"
+    title: "No guaranteed, assured or risk-free return claims"
+    domain: "COMMUNICATION"
+    source: "SEBI advertisement code for mutual funds and general investor-protection obligations"
+    source_url: "https://www.sebi.gov.in/"
+    effective_from: "1996-01-01"
+    effective_to: null
+    applicable_product: ["MUTUAL_FUND", "ADVISORY_SERVICE"]
+    applicable_investor_type: ["ALL"]
+    system_impact:
+      - "Every outbound string — LLM output, alert, push notification, email, marketing copy — passes compliance.check_language()."
+      - "A violation blocks delivery; it is never auto-rewritten silently, it is logged and regenerated."
+    enforcement: "BLOCK"
+    control_id: "CTRL-LANGUAGE-SCAN"
+    verification_status: "VERIFIED_SECONDARY"
+    legal_review_required: true
+    compliance_status: "MET_BY_DESIGN"
+
+  - rule_id: "COMM-PAST-PERF-001"
+    title: "Past performance must carry the standard caveat and standardised periods"
+    domain: "COMMUNICATION"
+    source: "SEBI advertisement code for mutual funds"
+    source_url: "https://www.sebi.gov.in/"
+    effective_from: "1996-01-01"
+    effective_to: null
+    applicable_product: ["MUTUAL_FUND"]
+    applicable_investor_type: ["ALL"]
+    system_impact:
+      - "Any screen or message containing a return figure must attach DISC-PAST-PERF-001."
+      - "Return periods shown must be the standardised set, not cherry-picked windows."
+    enforcement: "REQUIRE_DISCLOSURE"
+    control_id: "CTRL-PAST-PERF-DISC"
+    verification_status: "VERIFIED_SECONDARY"
+    legal_review_required: true
+    compliance_status: "MET_BY_DESIGN"
+
+  # ── Onboarding / AML ──────────────────────────────────────────────────────
+  - rule_id: "KYC-KRA-001"
+    title: "KYC through a registered KRA / CKYC before any transaction"
+    domain: "ONBOARDING"
+    source: "SEBI KYC (Know Your Client) Registration Agency framework; PMLA rules"
+    source_url: "https://www.sebi.gov.in/"
+    effective_from: "2011-12-23"
+    effective_to: null
+    applicable_product: ["MUTUAL_FUND"]
+    applicable_investor_type: ["ALL"]
+    system_impact:
+      - "Execution engine refuses any order for an investor whose KYC status is not VALIDATED."
+      - "Planning, analytics and education remain available pre-KYC."
+    enforcement: "BLOCK"
+    control_id: "CTRL-KYC-GATE"
+    verification_status: "VERIFIED_SECONDARY"
+    legal_review_required: true
+    compliance_status: "MET_BY_DESIGN"
+
+  - rule_id: "AML-PMLA-001"
+    title: "AML/CFT obligations — risk categorisation, screening, monitoring, STR"
+    domain: "AML"
+    source: "Prevention of Money Laundering Act 2002 and rules; SEBI AML/CFT master circular"
+    source_url: "https://www.sebi.gov.in/"
+    effective_from: "2002-01-17"
+    effective_to: null
+    applicable_product: ["MUTUAL_FUND"]
+    applicable_investor_type: ["ALL"]
+    system_impact:
+      - "Sanctions/PEP screening at onboarding and on change of key details."
+      - "Transaction monitoring rules run before the execution boundary, not after."
+    enforcement: "BLOCK"
+    control_id: "CTRL-AML"
+    verification_status: "VERIFIED_SECONDARY"
+    legal_review_required: true
+    compliance_status: "NOT_MET"
+
+  # ── Data protection ───────────────────────────────────────────────────────
+  - rule_id: "DPDP-RULES-2025-001"
+    title: "Digital Personal Data Protection Rules, 2025 — staged commencement"
+    domain: "PRIVACY"
+    source: "MeitY notification of the Digital Personal Data Protection Rules, 2025 (notified 13 November 2025)"
+    source_url: "https://www.meity.gov.in/"
+    effective_from: "2025-11-14"
+    effective_to: null
+    applicable_product: ["ALL"]
+    applicable_investor_type: ["ALL"]
+    compliance_calendar:
+      - milestone: "Foundational provisions and Data Protection Board"
+        date: "2025-11-14"
+        status: "IN_FORCE"
+      - milestone: "Consent manager provisions"
+        date: "2026-11-14"
+        status: "PENDING"
+      - milestone: "Substantive obligations of data fiduciaries"
+        date: "2027-05-14"
+        status: "PENDING"
+    system_impact:
+      - "Consent artefacts, purpose limitation, retention schedules and erasure workflows must be live before the substantive date, not on it."
+      - "The calendar above is configuration; the app must not hard-code a single implementation date."
+    enforcement: "PLAN"
+    control_id: "CTRL-DPDP-CALENDAR"
+    verification_status: "VERIFIED_SECONDARY"
+    legal_review_required: true
+    compliance_status: "IN_PROGRESS"
+
+  # ── AI governance ─────────────────────────────────────────────────────────
+  - rule_id: "SEBI-AI-GOVERNANCE-001"
+    title: "Responsible use of AI/ML — the regulated entity remains responsible for AI outputs"
+    domain: "AI_GOVERNANCE"
+    source: "SEBI consultation paper 'Guidelines for Responsible Usage of AI/ML in Indian Securities Markets' dated 20 June 2025 (proposals; track for final circular)"
+    source_url: "https://www.sebi.gov.in/"
+    effective_from: null
+    effective_to: null
+    applicable_product: ["ALL"]
+    applicable_investor_type: ["ALL"]
+    system_impact:
+      - "Model registry with owner, version, intended and prohibited use, validation date, bias and hallucination testing."
+      - "Every AI-influenced recommendation stores model_id and model_version in the audit trail."
+      - "Senior accountable owner named per model; rollback path documented."
+    enforcement: "PLAN"
+    control_id: "CTRL-AI-GOVERNANCE"
+    verification_status: "VERIFIED_SECONDARY"
+    legal_review_required: true
+    compliance_status: "IN_PROGRESS"
+    watch:
+      reason: "This was a consultation paper. Final obligations may differ. RegWatch must track the final circular and re-open this rule."
+      next_check: "2026-09-25"
+
+disclaimers:
+  DISC-MF-RISK-001:
+    text: "Mutual fund investments are subject to market risks. Read all scheme related documents carefully."
+    source: "Standard statutory warning"
+    applies_to: ["ANY_SCHEME_MENTION"]
+  DISC-PAST-PERF-001:
+    text: "Past performance is not indicative of, and does not guarantee, future results."
+    source: "SEBI advertisement code principle"
+    applies_to: ["ANY_RETURN_FIGURE"]
+  DISC-PROJECTION-001:
+    text: "Projections are illustrative estimates based on stated assumptions, not promises. Actual outcomes will differ."
+    source: "Platform policy; investor-protection principle"
+    applies_to: ["ANY_PROJECTION"]
+  DISC-NOT-REGISTERED-001:
+    text: "This platform is not currently registered with SEBI as an Investment Adviser. Nothing here is personalised investment advice."
+    source: "Platform policy while regulatory.sebi_ia_registration_verified is false"
+    applies_to: ["ALL_SCREENS"]

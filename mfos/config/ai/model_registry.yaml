@@ -1,0 +1,82 @@
+# AI Governance — model registry.
+#
+# Every model that touches an investor-facing output is listed here. A model
+# not in this registry cannot be invoked: the AI gateway looks up model_id here
+# first and refuses unknown or expired entries.
+
+ruleset:
+  id: "ai.registry"
+  version: "1.0.0"
+  published_on: "2026-08-25"
+  accountable_owner: "Chief Technology Officer (named individual on file)"
+  governing_rule: "SEBI-AI-GOVERNANCE-001"
+
+global_constraints:
+  llm_may_produce_numbers: false
+  llm_may_name_a_scheme_not_in_shortlist: false
+  llm_may_assert_a_regulatory_fact: false      # must come from the rule repository
+  llm_output_passes_language_scan: true
+  every_output_records_model_id_and_version: true
+  human_override_always_available: true
+
+models:
+
+  - model_id: "explainer"
+    version: "1.0.0"
+    kind: "LLM"
+    purpose: "Turn a completed, deterministic recommendation record into plain-language explanation."
+    intended_use:
+      - "Explaining a recommendation that has ALREADY been computed"
+      - "Answering 'why' questions about the investor's own portfolio"
+      - "Education"
+    prohibited_use:
+      - "Producing any number, rate, NAV, return, tax figure or probability"
+      - "Deciding a recommendation, score or signal"
+      - "Stating a regulatory or tax requirement from its own knowledge"
+      - "Naming a scheme that the deterministic shortlist did not produce"
+    inputs: ["recommendation_record", "audit_snapshot", "rule_citations"]
+    grounding: "STRICT_CONTEXT_ONLY"
+    validation_date: "2026-08-20"
+    validation_owner: "investment-research"
+    tests:
+      hallucination_suite: "tests/test_copilot.py::TestGrounding"
+      language_suite: "tests/test_compliance.py::TestLanguage"
+      bias_suite: "PENDING"
+    confidence_threshold: 0.0
+    rollback_to: null
+    monitoring:
+      - "refusal rate"
+      - "ungrounded-number rate (must be 0)"
+      - "language-scan block rate"
+    status: "ACTIVE"
+
+  - model_id: "profile_gap_detector"
+    version: "0.9.0"
+    kind: "RULES"
+    purpose: "Identify which missing profile field most changes the recommendation, to drive progressive profiling."
+    intended_use: ["Deciding the next onboarding question"]
+    prohibited_use: ["Inferring a missing value and proceeding as if it were known"]
+    validation_date: "2026-08-20"
+    status: "ACTIVE"
+
+  - model_id: "anomaly_detector"
+    version: "0.1.0"
+    kind: "ML"
+    purpose: "Flag data anomalies (NAV jumps, stale feeds, holdings that fail reconciliation)."
+    intended_use: ["Data quality gating"]
+    prohibited_use: ["Investment recommendations of any kind"]
+    validation_date: null
+    status: "NOT_VALIDATED"
+    note: "Cannot be enabled until validated and bias-tested. Gateway blocks it."
+
+  - model_id: "goal_probability"
+    version: "1.0.0"
+    kind: "DETERMINISTIC"
+    purpose: "Compute goal success probability from documented capital market assumptions."
+    intended_use: ["Goal projections, scenario analysis, decision simulator"]
+    prohibited_use: ["Being described to the investor as a prediction or a guarantee"]
+    method: "Lognormal terminal-wealth distribution with correlated asset volatility; assumptions from allocation_policy.v1.yaml"
+    validation_date: "2026-08-22"
+    tests:
+      determinism: "tests/test_goals.py"
+    status: "ACTIVE"

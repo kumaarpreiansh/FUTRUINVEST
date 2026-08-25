@@ -67,3 +67,46 @@ python main.py            # synthetic data demo, or drop a CSV in data/raw/
 - The final verdict always ends with a human-approval step. Nothing real
   ever executes.
 - Never commit secrets — keys go in `.env` (see `.env.example`).
+
+## `mfos/` — a second, separate subsystem
+
+`mfos/` holds **FUTRUINVEST**, an AI-led Mutual Fund Investment Operating System
+for India. It is independent of the hedge-fund committee above: different
+domain, different config, different tests. Do not merge their configuration or
+their entry points.
+
+```
+mfos/docs/       A-T design set + legal review register + decision log
+mfos/config/     versioned rule-sets (tax, compliance, scoring, allocation,
+                 signals, alerts, AI model registry) — ALL regulatory and tax
+                 facts live here, never in code
+mfos/src/mfos/   the engines
+mfos/tests/      176 tests
+mfos/demo.py     end-to-end run on clearly-labelled synthetic data
+```
+
+Run: `python mfos/demo.py`; test:
+`cd mfos/tests && python3 -m unittest discover -s .`
+
+### Rules that must not be weakened
+
+- `gates.auto_execution_enabled`, `gates.withdrawals_enabled`,
+  `gates.commission_influences_ranking` and `gates.allow_llm_generated_numbers`
+  stay `false` in `mfos/config/platform.yaml`. `Registry._validate()` refuses to
+  start otherwise, and tests assert it.
+- No tax rate, regulatory fact, threshold or disclosure may be hard-coded in
+  Python. It belongs in a versioned rule-set with a source and a
+  `verification_status`.
+- An `UNVERIFIED` rule may block a behaviour but may never justify allowing one.
+  `RuleSet.require_verified()` is the choke point.
+- The LLM may never produce a number, decide a recommendation, state a
+  regulatory fact, or name a scheme outside the deterministic shortlist.
+  `copilot.verify_numbers()` and the language scan enforce it, with a
+  deterministic fallback on any failure.
+- Compliance overrides AI; data quality overrides AI; suitability overrides
+  performance. Each is a code path, not a slogan.
+- The signal engine has no trigger that fires on a market or NAV decline, and
+  the exit engine has no price-based exit. Both omissions are deliberate and
+  tested.
+
+Before changing anything regulated, read `mfos/docs/LEGAL-REVIEW-REGISTER.md`.

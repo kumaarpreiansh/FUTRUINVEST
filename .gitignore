@@ -15,3 +15,6 @@ backtests/*
 !backtests/.gitkeep
 reports/*
 !reports/.gitkeep
+
+# mfos runtime output
+mfos/data/*.jsonl

@@ -1,0 +1,234 @@
+# Investment Signal Engine rules.
+#
+# Design rule that matters more than any threshold below:
+#   NO SINGLE TRIGGER PRODUCES AN ACTION SIGNAL.
+# A signal above WATCH requires either (a) several independent triggers whose
+# combined weight clears the band, or (b) one MATERIAL_EVENT.
+#
+# And: a falling market is not a trigger. There is deliberately no rule here
+# that fires on index drawdown alone.
+
+ruleset:
+  id: "signals.v1"
+  version: "1.0.0"
+  published_on: "2026-08-25"
+  owner: "investment-committee"
+
+states: ["HOLD", "WATCH", "REVIEW", "REBALANCE", "SWITCH_REVIEW", "REDUCE", "EXIT_REVIEW"]
+
+bands:
+  HOLD:          {min_score: 0,  max_score: 19}
+  WATCH:         {min_score: 20, max_score: 39}
+  REVIEW:        {min_score: 40, max_score: 59}
+  SWITCH_REVIEW: {min_score: 60, max_score: 79, min_triggers: 3}
+  EXIT_REVIEW:
+    min_score: 80
+    max_score: 999
+    min_triggers: 3
+    # Performance deterioration alone can never reach EXIT_REVIEW, however many
+    # triggers fire. Leaving an asset class is a decision about the investor's
+    # goal or a material change in the scheme — a weak fund is a reason to
+    # change the fund, which is SWITCH_REVIEW.
+    requires_material_event_or_emitter: true
+
+# Persistence: a trigger must survive this long before it counts. Kills noise.
+persistence:
+  default_observation_days: 90
+  min_confirmations: 2          # observed on 2 separate monthly evaluations
+
+triggers:
+
+  # ── Performance (deliberately the weakest family) ─────────────────────────
+  - id: "TRG-PERF-ROLLING-UNDER"
+    params: {max_win_rate: 0.40, window_years: 3}
+    family: "PERFORMANCE"
+    weight: 20
+    description: "Underperformed its own benchmark in a majority of rolling 3-year windows over the last 3 years"
+    condition: "rolling_3y_outperformance_rate < 0.40"
+    min_history_months: 60
+    persistence_days: 180
+    note: "Requires 5 years of data. Under-5-year funds cannot fire this."
+
+  - id: "TRG-PERF-CATEGORY-QUARTILE"
+    params: {worst_quartile: 4}
+    family: "PERFORMANCE"
+    weight: 10
+    description: "Bottom-quartile within its SEBI category on 3-year and 5-year rolling returns"
+    condition: "category_quartile_3y == 4 and category_quartile_5y == 4"
+    persistence_days: 180
+
+  - id: "TRG-RISKADJ-DETERIORATION"
+    params: {now_below_percentile: 25, was_at_least_percentile: 50}
+    family: "PERFORMANCE"
+    weight: 20
+    description: "Risk-adjusted performance has deteriorated versus its own history and its peers"
+    condition: "sharpe_percentile < 25 and sharpe_percentile_3y_ago >= 50"
+    persistence_days: 180
+
+  - id: "TRG-DOWNSIDE-CAPTURE"
+    params: {multiple_of_category_median: 1.20}
+    family: "RISK"
+    weight: 15
+    description: "Captures materially more downside than the category norm"
+    condition: "downside_capture > category_median_downside_capture * 1.20"
+    persistence_days: 180
+
+  # ── Process and structure (stronger: these are causes, not symptoms) ──────
+  - id: "TRG-MANAGER-CHANGE"
+    params: {within_days: 180}
+    family: "PROCESS"
+    weight: 25
+    material_event: false
+    description: "Fund manager changed"
+    condition: "manager_changed_within_days <= 180"
+    note: >
+      A manager change is a reason to WATCH, not to act. On its own it never
+      exceeds WATCH. It becomes material only alongside strategy drift.
+
+  - id: "TRG-MANDATE-DRIFT"
+    params: {max_drift_score: 0.35}
+    family: "PROCESS"
+    weight: 30
+    material_event: true
+    description: "Portfolio no longer resembles the stated mandate"
+    condition: "mandate_drift_score > 0.35"
+    persistence_days: 90
+
+  - id: "TRG-SCHEME-CHANGE"
+    params: {}
+    family: "PROCESS"
+    weight: 40
+    material_event: true
+    description: "Material change in scheme attributes, merger, or fundamental attribute change"
+    condition: "scheme_material_change == true"
+    note: "This is an event, not a metric. It alone can reach EXIT_REVIEW."
+
+  - id: "TRG-EXPENSE-INCREASE"
+    params: {min_increase_bps: 15}
+    family: "COST"
+    weight: 15
+    description: "Expense ratio increased materially and is now above the category median"
+    condition: "expense_ratio_increase_bps >= 15 and expense_ratio > category_median_expense"
+    persistence_days: 90
+
+  - id: "TRG-CONCENTRATION"
+    params: {points_above_category_median: 10}
+    family: "RISK"
+    weight: 15
+    description: "Portfolio concentration rose materially above the category norm"
+    condition: "top10_weight > category_median_top10 + 10"
+    persistence_days: 90
+
+  - id: "TRG-AUM-SHOCK"
+    params: {max_drop_6m_pct: 40, max_capacity_ratio: 1.5}
+    family: "RISK"
+    weight: 15
+    description: "AUM fell sharply, or grew past the capacity comfort level for the category"
+    condition: "aum_drop_6m_pct > 40 or aum_capacity_ratio > 1.5"
+    persistence_days: 90
+
+  - id: "TRG-LIQUIDITY"
+    params: {category_illiquid_limit_pct: 10}
+    family: "RISK"
+    weight: 25
+    material_event: true
+    description: "Portfolio liquidity has deteriorated to a level that could impair redemption"
+    condition: "illiquid_weight_pct > category_limit"
+
+  # ── Portfolio-level (investor-specific, not fund-specific) ────────────────
+  - id: "TRG-OVERLAP"
+    params: {max_overlap_pct: 40}
+    family: "PORTFOLIO"
+    weight: 20
+    description: "This fund substantially duplicates another holding"
+    condition: "max_pairwise_overlap_pct > 40"
+    persistence_days: 0
+
+  - id: "TRG-ALLOCATION-DRIFT"
+    params: {}
+    family: "PORTFOLIO"
+    weight: 25
+    description: "Asset allocation is outside the tolerance band"
+    condition: "abs(current_weight - target_weight) > band"
+    emits: "REBALANCE"
+    note: "Routes to REBALANCE, not SWITCH_REVIEW. Drift is an allocation problem, not a fund problem."
+
+  - id: "TRG-SUITABILITY-BREACH"
+    params: {}
+    family: "SUITABILITY"
+    weight: 35
+    material_event: true
+    description: "Holding is no longer suitable for the investor's binding risk band or horizon"
+    condition: "riskometer_band > investor_max_band or years_to_goal < min_years_for_asset_class"
+    emits: "REDUCE"
+
+  - id: "TRG-GOAL-PROXIMITY"
+    params: {}
+    family: "GOAL"
+    weight: 30
+    description: "Goal is inside the glide path and this holding is above the glide-path equity target"
+    condition: "years_to_goal <= glide_start_years and equity_pct > glide_target_equity_pct"
+    emits: "REDUCE"
+
+  - id: "TRG-GOAL-REACHED"
+    params: {max_years_to_goal: 3}
+    family: "GOAL"
+    weight: 40
+    material_event: true
+    description: "Corpus has reached the inflation-adjusted target; the reason for taking risk has gone"
+    condition: "projected_corpus >= inflation_adjusted_target and years_to_goal <= 3"
+    emits: "EXIT_REVIEW"
+
+  - id: "TRG-LIQUIDITY-NEED"
+    params: {within_months: 6}
+    family: "GOAL"
+    weight: 40
+    material_event: true
+    description: "Investor has a stated liquidity requirement this holding must fund"
+    condition: "declared_liquidity_need_within_months <= 6"
+    emits: "EXIT_REVIEW"
+
+  - id: "TRG-PROFILE-CHANGE"
+    params: {}
+    family: "SUITABILITY"
+    weight: 25
+    description: "Investor's risk capacity fell materially (income loss, dependant added, liability added)"
+    condition: "risk_capacity_band_dropped == true"
+
+# Dampeners: subtract from the score. These exist to stop the engine from
+# recommending action that costs more than it gains.
+dampeners:
+  - id: "DMP-EXIT-LOAD"
+    params: {}
+    weight: -15
+    condition: "exit_load_applicable == true"
+    description: "An exit load is still payable on some or all units"
+  - id: "DMP-TAX-COST"
+    params: {max_tax_pct_of_value: 3.0}
+    weight: -20
+    condition: "estimated_tax_pct_of_value > 3.0"
+    description: "The tax cost of acting is material"
+  - id: "DMP-RECENT-ACTION"
+    params: {min_months_since_action: 12}
+    weight: -30
+    condition: "months_since_last_action_on_holding < 12"
+    description: "Churn guard — this holding was already acted on within a year"
+  - id: "DMP-SHORT-HISTORY"
+    params: {min_history_months: 36}
+    weight: -25
+    condition: "history_months < 36"
+    description: "Not enough history to judge; do not act on noise"
+  - id: "DMP-MARGINAL-ALTERNATIVE"
+    params: {min_score_advantage: 8}
+    weight: -25
+    condition: "best_alternative_score - current_score < 8"
+    description: "The alternative is not materially better; switching is churn"
+
+# Explicitly NOT triggers. Kept here so the omission is visible and reviewable.
+non_triggers:
+  - "Index or NAV fell by any amount over any period"
+  - "Fund is down over 1 month / 3 months / 6 months"
+  - "Another fund had a better recent return"
+  - "A star rating changed"
+  - "Media commentary or an analyst note"
+  - "Investor anxiety without a change in facts"

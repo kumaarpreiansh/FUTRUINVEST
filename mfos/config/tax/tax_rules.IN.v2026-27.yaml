@@ -1,0 +1,189 @@
+# Versioned tax rule-set — India, mutual fund units.
+#
+# READ THIS BEFORE TRUSTING ANY NUMBER BELOW.
+#
+# Every rule carries a verification_status. The tax engine refuses to produce a
+# figure from a rule whose status is UNVERIFIED, and stamps every computed
+# figure with the rule_ids and ruleset_version used, so an auditor can replay it.
+#
+#   VERIFIED_PRIMARY   — checked against the bare Act / Finance Act / official
+#                        Income Tax Department text by a qualified reviewer.
+#   VERIFIED_SECONDARY — corroborated from reputable secondary commentary only.
+#                        Usable for ESTIMATES that are labelled as estimates.
+#                        MUST be upgraded to VERIFIED_PRIMARY before launch.
+#   UNVERIFIED         — placeholder. Engine will not compute with it.
+#
+# NOTHING here is tax advice. Surcharge, cess, slab interaction, set-off of
+# losses, residency and grandfathering are investor-specific and are flagged,
+# not silently assumed.
+
+ruleset:
+  id: "tax.IN"
+  version: "2026-27.1"
+  jurisdiction: "IN"
+  assessment_year: "2026-27"
+  currency: "INR"
+  published_on: "2026-08-25"
+  owner: "tax-compliance"
+  review_due: "2027-02-15"          # re-review after the next Union Budget
+  notes: >
+    Rates below were corroborated from secondary sources on 2026-08-25 and are
+    marked VERIFIED_SECONDARY. A qualified tax adviser must confirm each rule
+    against the Income-tax Act and the operative Finance Act before the tax
+    engine is used for anything other than clearly-labelled estimates.
+
+rules:
+
+  - rule_id: "TAX-EQ-LTCG-001"
+    title: "Long-term capital gains on equity-oriented mutual fund units"
+    applies_to:
+      asset_class: "EQUITY_ORIENTED"
+      min_holding_months: 12
+    rate_pct: 12.5
+    indexation: false
+    annual_exemption_inr: 125000
+    exemption_scope: "Aggregate of eligible long-term capital gains for the investor for the financial year, not per scheme."
+    effective_from: "2024-07-23"
+    effective_to: null
+    source: "Finance (No. 2) Act 2024 amendments to s.112A, Income-tax Act 1961"
+    source_url: "https://incometaxindia.gov.in/"
+    verification_status: "VERIFIED_SECONDARY"
+    legal_review_required: true
+    caveats:
+      - "Surcharge and health & education cess are additional and depend on total income."
+      - "The exemption is an investor-level annual limit; the engine can only apply it correctly if it sees all of the investor's eligible gains for the year."
+      - "Grandfathering of pre-01-Feb-2018 gains under s.112A may apply to old holdings."
+
+  - rule_id: "TAX-EQ-STCG-001"
+    title: "Short-term capital gains on equity-oriented mutual fund units"
+    applies_to:
+      asset_class: "EQUITY_ORIENTED"
+      max_holding_months: 12
+    rate_pct: 20.0
+    indexation: false
+    annual_exemption_inr: 0
+    effective_from: "2024-07-23"
+    effective_to: null
+    source: "Finance (No. 2) Act 2024 amendments to s.111A, Income-tax Act 1961"
+    source_url: "https://incometaxindia.gov.in/"
+    verification_status: "VERIFIED_SECONDARY"
+    legal_review_required: true
+    caveats:
+      - "Surcharge and cess additional."
+
+  - rule_id: "TAX-SPECMF-SLAB-001"
+    title: "Specified mutual funds (units acquired on/after 01-Apr-2023) — deemed short-term"
+    applies_to:
+      asset_class: "SPECIFIED_MUTUAL_FUND"
+      acquired_on_or_after: "2023-04-01"
+    rate_pct: null
+    rate_basis: "INVESTOR_SLAB"
+    indexation: false
+    annual_exemption_inr: 0
+    effective_from: "2023-04-01"
+    effective_to: null
+    source: "s.50AA, Income-tax Act 1961 (inserted by Finance Act 2023)"
+    source_url: "https://incometaxindia.gov.in/"
+    verification_status: "VERIFIED_SECONDARY"
+    legal_review_required: true
+    caveats:
+      - "Taxed at the investor's applicable slab rate irrespective of holding period, so the engine needs the investor's marginal rate; without it, no figure is produced."
+      - "The statutory definition of a 'specified mutual fund' has itself been amended; classification of a given scheme is a LEGAL REVIEW item, not an inference from the scheme name."
+
+  - rule_id: "TAX-DEBT-OLD-LTCG-001"
+    title: "Debt-oriented units acquired before 01-Apr-2023, held over 24 months"
+    applies_to:
+      asset_class: "DEBT_ORIENTED_LEGACY"
+      acquired_before: "2023-04-01"
+      min_holding_months: 24
+    rate_pct: 12.5
+    indexation: false
+    annual_exemption_inr: 0
+    effective_from: "2024-07-23"
+    effective_to: null
+    source: "Finance (No. 2) Act 2024; transitional treatment of pre-Apr-2023 units"
+    source_url: "https://incometaxindia.gov.in/"
+    verification_status: "VERIFIED_SECONDARY"
+    legal_review_required: true
+    caveats:
+      - "Transitional rules for units straddling the 2023 and 2024 amendments are intricate. Treat every figure from this rule as an estimate and route to a human."
+
+  - rule_id: "TAX-HYBRID-CLASSIFY-001"
+    title: "Hybrid scheme tax classification"
+    applies_to:
+      asset_class: "HYBRID"
+    rate_pct: null
+    rate_basis: "DEPENDS_ON_EQUITY_EXPOSURE"
+    effective_from: "2023-04-01"
+    effective_to: null
+    source: "LEGAL REVIEW REQUIRED"
+    source_url: null
+    verification_status: "UNVERIFIED"
+    legal_review_required: true
+    caveats:
+      - "Tax treatment turns on the scheme's actual equity exposure thresholds. The engine must NOT guess. Until this rule is verified, hybrid redemptions return NO_RULE and the recommendation is blocked from claiming a tax figure."
+
+  - rule_id: "TAX-SWITCH-IS-REDEMPTION-001"
+    title: "A switch between schemes is a redemption plus a fresh purchase"
+    applies_to:
+      transaction_type: "SWITCH"
+    treatment: "TAXABLE_REDEMPTION_OF_SOURCE_SCHEME"
+    effective_from: "2000-01-01"
+    effective_to: null
+    source: "General position: a switch is a transfer of units of the source scheme."
+    source_url: "https://www.amfiindia.com/"
+    verification_status: "VERIFIED_SECONDARY"
+    legal_review_required: true
+    caveats:
+      - "This is why the switch engine must never present a switch as a cost-free 'move'."
+
+  - rule_id: "TAX-STT-001"
+    title: "Securities Transaction Tax on equity-oriented unit redemption"
+    applies_to:
+      asset_class: "EQUITY_ORIENTED"
+      transaction_type: "REDEMPTION"
+    rate_pct: null
+    effective_from: null
+    effective_to: null
+    source: "LEGAL REVIEW REQUIRED"
+    source_url: null
+    verification_status: "UNVERIFIED"
+    legal_review_required: true
+
+# Surcharge and cess are deliberately modelled as a separate, investor-specific
+# overlay rather than being folded into the headline rates above.
+overlays:
+  cess:
+    rule_id: "TAX-CESS-001"
+    name: "Health and Education Cess"
+    rate_pct: 4.0
+    applies_on: "TAX_AMOUNT"
+    verification_status: "VERIFIED_SECONDARY"
+    legal_review_required: true
+  surcharge:
+    rule_id: "TAX-SURCHARGE-001"
+    name: "Surcharge on capital gains"
+    rate_basis: "INVESTOR_TOTAL_INCOME_SLAB"
+    bands: []                      # intentionally empty
+    verification_status: "UNVERIFIED"
+    legal_review_required: true
+    note: "Bands must be populated from the operative Finance Act by a qualified reviewer. Until then the engine reports surcharge as UNKNOWN and labels the tax figure as a lower bound."
+
+holding_period_definitions:
+  EQUITY_ORIENTED:
+    long_term_months: 12
+    verification_status: "VERIFIED_SECONDARY"
+  DEBT_ORIENTED_LEGACY:
+    long_term_months: 24
+    verification_status: "VERIFIED_SECONDARY"
+  SPECIFIED_MUTUAL_FUND:
+    long_term_months: null
+    note: "No long-term treatment; s.50AA."
+    verification_status: "VERIFIED_SECONDARY"
+
+lot_accounting:
+  method: "FIFO"
+  rule_id: "TAX-FIFO-001"
+  source: "Standard RTA/AMC practice for mutual fund units"
+  verification_status: "VERIFIED_SECONDARY"
+  legal_review_required: true

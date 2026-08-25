@@ -133,6 +133,30 @@ python -m unittest discover tests -v
 
 ---
 
+## Also in this repository: `mfos/`
+
+A separate, self-contained subsystem — **FUTRUINVEST, an AI-led Mutual Fund
+Investment Operating System for India**. Different problem, different discipline:
+goal-based planning and portfolio management for long-term mutual fund
+investors, not equity research and backtesting.
+
+```bash
+python mfos/demo.py                                   # end-to-end, synthetic data
+cd mfos/tests && python3 -m unittest discover -s .    # 176 tests
+```
+
+It shares this repository's central commitment — nothing real ever executes —
+and adds a regulatory posture appropriate to giving investment advice in India:
+every tax and compliance rule is versioned configuration with a source and a
+verification status, the engines refuse to compute with unverified rules, and
+the recommendation pipeline halts at the compliance stage because the platform
+is not a registered Investment Adviser.
+
+Start at [`mfos/README.md`](mfos/README.md) or the design set at
+[`mfos/docs/00-INDEX.md`](mfos/docs/00-INDEX.md).
+
+---
+
 Educational only. Not financial, investment, legal, or tax advice. Trading
 involves substantial risk of loss. Backtests and simulations do not guarantee
 real results, and this is not a real hedge fund. Live trading and withdrawals
