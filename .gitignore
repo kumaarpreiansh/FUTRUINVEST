@@ -15,3 +15,7 @@ backtests/*
 !backtests/.gitkeep
 reports/*
 !reports/.gitkeep
+
+# dq_platform
+dq_demo/
+.dq/

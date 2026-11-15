@@ -1,0 +1,27 @@
+# Sales order headers. Starter template — verify against your ERP.
+entity: sales_order
+description: Integrity and validity of sales order headers
+fields: [order_id, customer_id, order_date, net_value, currency]
+
+tables:
+  sap: VBAK                    # sales document header
+  oracle_ebs: OE_ORDER_HEADERS_ALL
+  dynamics365: SALESTABLE
+  generic: sales_orders
+
+mappings:
+  sap:         {order_id: VBELN, customer_id: KUNNR, order_date: ERDAT, net_value: NETWR, currency: WAERK}
+  oracle_ebs:  {order_id: HEADER_ID, customer_id: SOLD_TO_ORG_ID, order_date: ORDERED_DATE,
+                currency: TRANSACTIONAL_CURR_CODE}
+  dynamics365: {order_id: SALESID, customer_id: CUSTACCOUNT, currency: CURRENCYCODE}
+  generic:     {order_id: order_id, customer_id: customer_id, order_date: order_date,
+                net_value: net_value, currency: currency}
+
+checks:
+  - {id: id_present, type: not_null, column: "{order_id}"}
+  - {id: id_unique,  type: unique,   column: "{order_id}"}
+  - {id: customer_present, type: not_null, column: "{customer_id}"}
+  - {id: value_non_negative, type: range, column: "{net_value}", min: 0, severity: warn,
+     description: "Negative net values are usually credit memos posted as orders"}
+  - {id: currency_iso, type: regex, column: "{currency}", format: iso_currency}
+  - {id: fresh, type: freshness, column: "{order_date}", max_age: 2d, severity: warn}

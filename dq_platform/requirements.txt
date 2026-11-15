@@ -1,0 +1,9 @@
+# Core (enough for SQLite sources and the demo)
+PyYAML>=6.0
+
+# Optional — install what your sources need:
+# google-cloud-bigquery>=3.0      # BigQuery (GCP)
+# sqlalchemy>=2.0                 # Postgres, MySQL, SQL Server, Oracle, Snowflake, Redshift, Databricks, SAP HANA ...
+#   psycopg2-binary / pymysql / pyodbc / oracledb / snowflake-sqlalchemy / sqlalchemy-hana  (the driver for your DB)
+# pandas>=2.0  pyarrow            # CSV / Parquet / JSON file sources
+# gcsfs                           # files on gs://

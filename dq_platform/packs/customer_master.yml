@@ -1,0 +1,28 @@
+# Customer master data — the same rules, mapped onto each ERP's own column names.
+# Starter template: verify table/column names against your ERP release and
+# customisations before relying on it. Fields an ERP doesn't map are skipped.
+entity: customer_master
+description: Completeness, uniqueness and validity of customer master records
+fields: [customer_id, name, country, email, currency, created_on]
+
+tables:
+  sap: KNA1                    # SAP ECC / S/4HANA general customer data
+  oracle_ebs: HZ_CUST_ACCOUNTS
+  dynamics365: CUSTTABLE       # Dynamics 365 Finance & Operations
+  generic: customers
+
+mappings:
+  sap:         {customer_id: KUNNR, name: NAME1, country: LAND1, created_on: ERDAT}
+  oracle_ebs:  {customer_id: ACCOUNT_NUMBER, created_on: CREATION_DATE}
+  dynamics365: {customer_id: ACCOUNTNUM, currency: CURRENCY}
+  generic:     {customer_id: customer_id, name: name, country: country, email: email,
+                currency: currency, created_on: created_at}
+
+checks:
+  - {id: id_present,  type: not_null, column: "{customer_id}"}
+  - {id: id_unique,   type: unique,   column: "{customer_id}"}
+  - {id: name_present, type: not_null, column: "{name}", severity: warn}
+  - {id: country_iso, type: regex, column: "{country}", format: iso_country,
+     description: "ISO 3166-1 alpha-2 country code"}
+  - {id: email_valid, type: regex, column: "{email}", format: email, max_failure_pct: 2, severity: warn}
+  - {id: currency_iso, type: regex, column: "{currency}", format: iso_currency}
