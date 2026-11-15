@@ -1,0 +1,670 @@
+<title>DQ Platform Prototype</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: operator console. A fixed rail of views on the left, a working canvas on the right.
+   Ledger-green accent (a data steward's "verified" mark); semantic red / amber / violet for state. */
+:root {
+  --bg:#f5f6f3; --panel:#ffffff; --panel2:#f9faf7; --ink:#1a1d1a; --muted:#646a63; --line:#e1e4de;
+  --accent:#2f6f5e; --accent-ink:#ffffff; --good:#1f8a4c; --ok:#a4690f; --bad:#c9302c; --info:#6a52c9;
+  --code:#eff1ec; --shadow:0 1px 2px rgba(20,30,20,.04), 0 4px 14px rgba(20,30,20,.04);
+  --sans:"IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono:"IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg:#121412; --panel:#1b1e1b; --panel2:#1f221f; --ink:#e9ece8; --muted:#a0a69e; --line:#30342f;
+  --accent:#62b59c; --accent-ink:#0e1a16; --good:#4cc38a; --ok:#efb24a; --bad:#ff6b66; --info:#a993ff;
+  --code:#252925; --shadow:none; color-scheme:dark; } }
+:root[data-theme="dark"] {
+  --bg:#121412; --panel:#1b1e1b; --panel2:#1f221f; --ink:#e9ece8; --muted:#a0a69e; --line:#30342f;
+  --accent:#62b59c; --accent-ink:#0e1a16; --good:#4cc38a; --ok:#efb24a; --bad:#ff6b66; --info:#a993ff;
+  --code:#252925; --shadow:none; color-scheme:dark; }
+* { box-sizing:border-box }
+html, body { background:var(--bg); color:var(--ink) }
+body { font:14.5px/1.5 var(--sans); }
+a { color:var(--accent); text-decoration:none; cursor:pointer } a:hover { text-decoration:underline }
+code, pre, textarea.code { font-family:var(--mono); font-size:12.5px }
+h1, h2, h3 { text-wrap:balance }
+.app { display:grid; grid-template-columns:224px minmax(0,1fr); min-height:100vh }
+.app > * { min-width:0 }
+aside { border-right:1px solid var(--line); padding:18px 12px; position:sticky; top:0; height:100vh; background:var(--panel2); display:flex; flex-direction:column }
+.brand { display:flex; gap:10px; align-items:center; font-weight:700; font-size:16px; padding:0 8px 4px }
+.brand .logo { width:28px; height:28px; border-radius:8px; background:var(--accent); display:grid; place-items:center; flex:none }
+.brand-sub { font-size:11.5px; color:var(--muted); padding:0 8px 16px 46px; letter-spacing:.02em }
+nav { display:flex; flex-direction:column; gap:2px }
+nav a { display:flex; gap:10px; align-items:center; padding:8px 10px; border-radius:8px; color:var(--ink) }
+nav a:hover { background:var(--line); text-decoration:none }
+nav a.active { background:var(--accent); color:var(--accent-ink) }
+nav .count { margin-left:auto; font-size:12px; background:var(--bad); color:#fff; border-radius:999px; padding:0 7px; font-variant-numeric:tabular-nums }
+nav a.active .count { background:var(--accent-ink); color:var(--accent) }
+.side-foot { margin-top:auto; padding:0 8px; font-size:12px; color:var(--muted) }
+main { padding-block:22px 64px; padding-left:max(28px, env(safe-area-inset-left, 0px)); padding-right:max(28px, env(safe-area-inset-right, 0px)); min-width:0 }
+.top { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:18px }
+.top h1 { font-size:22px; margin:0; flex:1; min-width:200px; letter-spacing:-.01em }
+.muted { color:var(--muted) } .small { font-size:12.5px }
+button, .btn { font:inherit; border:1px solid var(--line); background:var(--panel); color:var(--ink); border-radius:8px;
+  padding:7px 13px; cursor:pointer; display:inline-flex; align-items:center; gap:6px; white-space:nowrap }
+button:hover { border-color:var(--muted) }
+button.primary { background:var(--accent); border-color:var(--accent); color:var(--accent-ink); font-weight:600 }
+button.danger { color:var(--bad) } button.confirming { background:var(--bad); border-color:var(--bad); color:#fff }
+button.ghost { border-color:transparent; background:transparent; padding:4px 8px }
+button:disabled { opacity:.55; cursor:progress }
+.spin { width:14px; height:14px; border:2px solid currentColor; border-right-color:transparent; border-radius:50%; animation:r .7s linear infinite }
+@keyframes r { to { transform:rotate(360deg) } }
+@media (prefers-reduced-motion: reduce) { .spin { animation-duration:2s } }
+.card { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:16px; box-shadow:var(--shadow); min-width:0 }
+.grid { display:grid; gap:14px } .grid > * { min-width:0 }
+.tiles { grid-template-columns:repeat(auto-fit,minmax(150px,1fr)) }
+.two { grid-template-columns:minmax(0,3fr) minmax(0,2fr) } @media (max-width:980px) { .two { grid-template-columns:minmax(0,1fr) } }
+.tile .label { color:var(--muted); font-size:12.5px } .tile .value { font-size:28px; font-weight:600; font-variant-numeric:tabular-nums; letter-spacing:-.01em }
+.good { color:var(--good) } .ok { color:var(--ok) } .bad { color:var(--bad) } .info { color:var(--info) }
+h2 { font-size:15px; margin:0 0 12px } h3 { font-size:14px; margin:18px 0 8px }
+.section { margin-top:18px }
+.dim { display:grid; grid-template-columns:110px 1fr 50px; gap:10px; align-items:center; padding:4px 0 }
+.dim b { text-align:right; font-variant-numeric:tabular-nums }
+.bar { height:8px; background:var(--line); border-radius:4px; overflow:hidden } .bar > div { height:100% }
+.bg-good { background:var(--good) } .bg-ok { background:var(--ok) } .bg-bad { background:var(--bad) }
+table { width:100%; border-collapse:collapse }
+th, td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--line); vertical-align:top; overflow-wrap:anywhere }
+th { color:var(--muted); font-weight:600; font-size:11.5px; text-transform:uppercase; letter-spacing:.05em; overflow-wrap:normal; white-space:nowrap }
+tr.click { cursor:pointer } tr.click:hover td { background:var(--panel2) }
+.num { text-align:right; font-variant-numeric:tabular-nums }
+.scroll { overflow-x:auto }
+.pill { display:inline-block; min-width:52px; text-align:center; padding:0 8px; border-radius:999px; font-size:12px;
+  font-weight:600; border:1px solid currentColor; line-height:20px; white-space:nowrap }
+.pill.fail, .pill.error { color:var(--bad) } .pill.warn { color:var(--ok) } .pill.pass { color:var(--good) }
+.pill.skipped, .pill.none { color:var(--muted) }
+.chip { display:inline-block; padding:1px 9px; border-radius:999px; background:var(--code); font-size:12.5px; margin:2px 4px 2px 0 }
+.issue { border-left:4px solid var(--muted); margin-bottom:10px; padding:12px 16px }
+.issue.fail, .issue.error { border-left-color:var(--bad) } .issue.warn { border-left-color:var(--ok) } .issue.pass { border-left-color:var(--good) }
+.issue > summary { cursor:pointer; list-style:none } .issue > summary::-webkit-details-marker { display:none }
+.issue .head { display:flex; gap:10px; align-items:baseline; flex-wrap:wrap } .issue .head b { overflow-wrap:anywhere }
+dl.kv { display:grid; grid-template-columns:150px minmax(0,1fr); gap:4px 12px; margin:12px 0 } dl.kv dt { color:var(--muted) } dl.kv dd { margin:0; min-width:0 }
+@media (max-width:600px) { dl.kv { grid-template-columns:minmax(0,1fr) } dl.kv dt { margin-top:6px } }
+pre { background:var(--code); padding:10px 12px; border-radius:8px; overflow-x:auto; white-space:pre-wrap; margin:6px 0 }
+table.samples { background:var(--code); border-radius:8px; font-size:12.5px; font-family:var(--mono) }
+.filters { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:14px }
+select, input, textarea { font:inherit; color:var(--ink); background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:7px 10px; min-width:0 }
+input:focus, select:focus, textarea:focus, button:focus-visible, a:focus-visible { outline:2px solid var(--accent); outline-offset:1px }
+label.f { display:grid; gap:4px; font-size:12.5px; color:var(--muted); min-width:0 } label.f > * { color:var(--ink); font-size:14px; width:100%; min-width:0 }
+.form { display:grid; gap:10px; grid-template-columns:repeat(auto-fit,minmax(min(200px,100%),1fr)); align-items:end }
+textarea.code { width:100%; min-height:62vh; tab-size:2; line-height:1.55; background:var(--code) }
+.seg { display:inline-flex; border:1px solid var(--line); border-radius:8px; overflow-x:auto; max-width:100% }
+.seg button { border:0; border-radius:0; border-right:1px solid var(--line) } .seg button:last-child { border-right:0 }
+.seg button.on { background:var(--accent); color:var(--accent-ink) }
+.empty { text-align:center; padding:32px 16px; color:var(--muted) }
+.toast { position:fixed; right:max(18px, env(safe-area-inset-right, 0px)); bottom:max(18px, env(safe-area-inset-bottom, 0px)); display:grid; gap:8px; z-index:20; max-width:min(440px, calc(100vw - 32px)) }
+.toast div { background:var(--ink); color:var(--bg); padding:10px 14px; border-radius:10px; box-shadow:0 6px 24px rgba(0,0,0,.2) }
+.toast div.err { background:var(--bad); color:#fff }
+svg.lineage { display:block; max-width:none; font:12.5px var(--sans) }
+svg.lineage .edge { fill:none; stroke:var(--muted); stroke-width:1.4; opacity:.7 }
+svg.lineage .arrow { fill:var(--muted) }
+svg.lineage .node { cursor:pointer }
+svg.lineage .node rect { fill:var(--panel); stroke:var(--line); stroke-width:1.5 }
+svg.lineage .node:hover rect, svg.lineage .node.sel rect { fill:var(--code) }
+svg.lineage .node text { fill:var(--ink) }
+svg.lineage .node.ext rect { stroke-dasharray:4 3 }
+svg.lineage .node.fail rect { stroke:var(--bad); stroke-width:2.5 }
+svg.lineage .node.warn rect { stroke:var(--ok); stroke-width:2.5 }
+svg.lineage .node.pass rect { stroke:var(--good); stroke-width:2 }
+svg.lineage .node.impacted rect { stroke:var(--info); stroke-width:2.5 }
+.key { display:inline-block; width:10px; height:10px; border-radius:3px; margin:0 4px 0 12px; border:2px solid }
+.trend { width:100%; height:150px; display:block } .trend .ln { fill:none; stroke:var(--accent); stroke-width:2 }
+.trend .area { fill:var(--accent); opacity:.1 } .trend text { fill:var(--muted); font-size:11px; font-family:var(--sans) } .trend .gl { stroke:var(--line) }
+.trend circle { fill:var(--accent) }
+.inc { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px 12px; align-items:center; padding:8px 0; border-bottom:1px solid var(--line) }
+.inc:last-child { border-bottom:0 }
+.intro { background:var(--panel2); border:1px dashed var(--accent); border-radius:12px; padding:14px 16px; margin-bottom:16px; display:grid; gap:10px }
+.intro .steps { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(210px,100%),1fr)); gap:10px }
+.intro .step { display:flex; gap:10px; align-items:flex-start }
+.intro .n { flex:none; width:22px; height:22px; border-radius:50%; background:var(--accent); color:var(--accent-ink); display:grid; place-items:center; font-size:12px; font-weight:700 }
+.drop { border:2px dashed var(--line); border-radius:12px; padding:22px; text-align:center; color:var(--muted); cursor:pointer }
+.drop.over { border-color:var(--accent); color:var(--ink); background:var(--panel2) }
+.boot { min-height:70vh; display:grid; place-items:center; text-align:center; gap:10px }
+.inline-form { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:8px }
+.inline-form input { flex:1; min-width:140px }
+@media (max-width:820px) {
+  .app { grid-template-columns:minmax(0,1fr) }
+  aside { position:sticky; top:env(safe-area-inset-top, 0px); height:auto; z-index:5; padding:10px max(12px, env(safe-area-inset-right, 0px)) 10px max(12px, env(safe-area-inset-left, 0px)); border-right:0; border-bottom:1px solid var(--line) }
+  body::before { content:""; position:fixed; inset:0 0 auto; height:env(safe-area-inset-top, 0px); z-index:10; background:var(--panel2) }
+  .brand { padding:0 4px 8px } .brand-sub, .side-foot { display:none }
+  nav { flex-direction:row; overflow-x:auto; gap:4px } nav a { flex:none }
+  main { padding-block:16px 64px; padding-left:max(16px, env(safe-area-inset-left, 0px)); padding-right:max(16px, env(safe-area-inset-right, 0px)) }
+}
+</style>
+
+<div class="app">
+  <aside>
+    <div class="brand"><span class="logo"><svg width="16" height="16" viewBox="0 0 32 32" aria-hidden="true"><path d="M7 16.5l5.5 5.5L25 10" stroke="#fff" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span>DQ Platform</div>
+    <div class="brand-sub">Working prototype</div>
+    <nav id="nav">
+      <a href="#overview" data-r="overview">Overview</a>
+      <a href="#issues" data-r="issues">Issues <span class="count" id="issue-count" hidden></span></a>
+      <a href="#assets" data-r="assets">Assets</a>
+      <a href="#lineage" data-r="lineage">Lineage</a>
+      <a href="#sources" data-r="sources">Sources</a>
+      <a href="#history" data-r="history">History</a>
+      <a href="#config" data-r="config">Config</a>
+    </nav>
+    <div class="side-foot" id="proj"></div>
+  </aside>
+  <main id="main"><div class="boot"><div><div class="spin" style="margin:0 auto 12px;width:22px;height:22px"></div>
+    <b>Starting the data quality engine…</b><div class="muted small">Loading SQLite, building the sample ERP and warehouse, and recording five baseline runs.</div></div></div></main>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="vendor/js-yaml.min.js"></script>
+<script src="vendor/sql-wasm.js"></script>
+<script src="dq-engine.js"></script>
+<script>
+"use strict";
+const $ = (s, el = document) => el.querySelector(s);
+const esc = v => v === null || v === undefined ? "—" :
+  String(typeof v === "object" ? JSON.stringify(v) : v).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const attr = v => String(v ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const fmtScore = s => s === null || s === undefined ? "—" : Number(s).toFixed(1);
+const scoreCls = s => s === null || s === undefined ? "muted" : s >= 95 ? "good" : s >= 80 ? "ok" : "bad";
+const when = iso => { if (!iso) return "—"; const d = new Date(iso); const s = Math.round((Date.now() - d) / 1000);
+  return s < 10 ? "just now" : s < 60 ? `${s}s ago` : s < 3600 ? `${Math.round(s/60)} min ago` : d.toLocaleString(); };
+const ORDER = { fail:0, error:1, warn:2, skipped:3, pass:4 };
+let E = null;                          // the engine
+const S = { params: {}, filter: null }; // view state
+
+function toast(msg, err = false) {
+  const d = document.createElement("div"); d.textContent = msg; if (err) d.className = "err";
+  $("#toast").appendChild(d); setTimeout(() => d.remove(), err ? 7000 : 4000);
+}
+async function busy(btn, label, fn) {
+  const html = btn.innerHTML; btn.disabled = true; btn.innerHTML = `<span class="spin"></span> ${label}`;
+  await new Promise(r => setTimeout(r, 30));  // let the spinner paint before synchronous SQL work
+  try { return await fn(); } catch (e) { toast(e.message, true); } finally { if (btn.isConnected) { btn.disabled = false; btn.innerHTML = html; } }
+}
+function confirmClick(btn, label = "Click again to confirm") {
+  if (btn.classList.contains("confirming")) return true;
+  const html = btn.innerHTML; btn.classList.add("confirming"); btn.textContent = label;
+  setTimeout(() => { if (btn.isConnected) { btn.classList.remove("confirming"); btn.innerHTML = html; } }, 3500);
+  return false;
+}
+let go;
+
+// ------------------------------------------------------------------ data access (mirrors the server edition's API)
+const mean = DQ.mean100;
+function currentState(runId) {
+  const p = E.project();
+  let run, results;
+  if (!runId) {
+    results = E.current(p);
+    const last = E.store.listRuns(1)[0];
+    run = last ? { run_id: "current", current: true, started_at: last.started_at } : null;
+  } else {
+    run = E.store.runs.find(r => r.run_id === runId);
+    results = E.store.runResults(runId);
+  }
+  const g = E.lineage(p), status = {};
+  for (const r of results) {
+    const cur = status[r.asset];
+    if ((r.status === "fail" || r.status === "warn") && cur !== "fail") status[r.asset] = r.status;
+    else if (r.status === "pass" && !cur) status[r.asset] = "pass";
+  }
+  const impact = {};
+  for (const [a, s] of Object.entries(status)) if ((s === "fail" || s === "warn") && g.nodes[a]) impact[a] = g.downstream(a);
+  for (const ds of Object.values(impact)) for (const d of ds) if (!status[d] || status[d] === "pass") status[d] = "impacted";
+  return { project: p, run, results, impact, graph: g, status };
+}
+function assetsView() {
+  const { project: p, results, graph: g } = currentState();
+  const byId = Object.fromEntries(results.map(r => [r.check_id, r]));
+  return Object.values(p.assets).map(a => {
+    const checks = DQ.expandChecks(a).map(c => ({ id: c.id, type: c.type, column: c.column || c.columns, severity: c.severity || "error", status: byId[c.id]?.status || null, message: byId[c.id]?.message || "" }));
+    return { ...a, checks, score: mean(checks.map(c => byId[c.id]?.score)), upstream: g.upstream(a.name), downstream: g.downstream(a.name) };
+  });
+}
+function refreshShell() {
+  const p = E.project(), res = E.current(p);
+  const nChecks = Object.values(p.assets).reduce((n, a) => n + DQ.expandChecks(a).length, 0);
+  $("#proj").innerHTML = `<div><b>${esc(p.name)}</b></div><div>${Object.keys(p.connections).length} sources · ${Object.keys(p.assets).length} assets · ${nChecks} checks</div>`;
+  const n = res.filter(r => r.status === "fail" || r.status === "error").length;
+  const c = $("#issue-count"); c.hidden = !n; c.textContent = n;
+}
+
+// ------------------------------------------------------------------ shared bits
+const runBtn = (label = "▶ Run all checks", assets = "") => `<button class="primary" data-act="run" data-arg="${attr(assets)}">${label}</button>`;
+const topbar = (title, extra = "") => `<div class="top"><h1>${title}</h1>${extra}${runBtn()}</div>`;
+function dimBars(dims) {
+  return Object.entries(dims).map(([d, s]) => `<div class="dim"><span>${d[0].toUpperCase() + d.slice(1)}</span>
+    <div class="bar"><div class="bg-${scoreCls(s)}" style="width:${s ?? 0}%"></div></div><b class="${scoreCls(s)}">${fmtScore(s)}</b></div>`).join("");
+}
+function trendSvg(runs) {
+  const pts = runs.filter(r => r.score !== null && r.score !== undefined);
+  if (pts.length < 2) return `<div class="empty">The trend appears after two full runs.</div>`;
+  const W = 600, H = 150, L = 34, R = 10, T = 10, B = 22;
+  const vals = pts.map(p => p.score), lo = Math.max(0, Math.floor(Math.min(...vals, 90) / 5) * 5), hi = 100;
+  const x = i => L + i * (W - L - R) / (pts.length - 1), y = v => T + (hi - v) / (hi - lo) * (H - T - B);
+  const line = pts.map((p, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(p.score).toFixed(1)}`).join(" ");
+  const grid = [lo, (lo + hi) / 2, hi].map(v => `<line class="gl" x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}"/><text x="${L - 6}" y="${y(v) + 4}" text-anchor="end">${v}</text>`).join("");
+  const dots = pts.map((p, i) => `<circle cx="${x(i)}" cy="${y(p.score)}" r="${i === pts.length - 1 ? 4 : 2.5}"><title>${esc(p.run_id)}: ${fmtScore(p.score)} (${p.status})</title></circle>`).join("");
+  return `<svg class="trend" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Quality score over the last ${pts.length} full runs">
+    ${grid}<path class="area" d="${line} L${x(pts.length - 1)},${H - B} L${L},${H - B} Z"/><path class="ln" d="${line}"/>${dots}
+    <text x="${L}" y="${H - 5}">${pts.length} runs ago</text><text x="${W - R}" y="${H - 5}" text-anchor="end">latest</text></svg>`;
+}
+function samplesTable(samples) {
+  if (!samples || !samples.length) return "";
+  const cols = [...new Set(samples.flatMap(s => Object.keys(s)))];
+  return `<div class="scroll"><table class="samples"><thead><tr>${cols.map(c => `<th>${esc(c)}</th>`).join("")}</tr></thead>
+    <tbody>${samples.map(s => `<tr>${cols.map(c => `<td>${esc(s[c])}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
+}
+function issueCard(r, impact, open) {
+  const downs = (impact || {})[r.asset] || [];
+  return `<details class="card issue ${r.status}" ${open ? "open" : ""}>
+    <summary><div class="head"><span class="pill ${r.status}">${r.status}</span><b>${esc(r.check_id)}</b>
+      <span class="muted small">${esc(r.dimension)} · ${esc(r.type)} · ${esc(r.severity)}</span></div>
+      <div style="margin-top:4px">${esc(r.message)}</div></summary>
+    <dl class="kv"><dt>Asset</dt><dd><a data-act="asset" data-arg="${attr(r.asset)}">${esc(r.asset)}</a></dd>
+      <dt>Observed</dt><dd>${esc(r.observed)}</dd><dt>Expected</dt><dd>${esc(r.expected)}</dd>
+      ${r.total_rows ? `<dt>Rows affected</dt><dd>${r.failed_rows ?? 0} of ${r.total_rows}</dd>` : ""}
+      ${r.description ? `<dt>Rule</dt><dd>${esc(r.description)}</dd>` : ""}
+      ${r.status === "fail" || r.status === "warn" ? `<dt>Downstream impact</dt><dd>${downs.length ? downs.map(d => `<span class="chip">${esc(d)}</span>`).join("") : "none"}</dd>` : ""}
+    </dl>${samplesTable(r.samples)}
+    ${r.sql ? `<details><summary class="muted small" style="cursor:pointer">SQL pushed down to the source</summary><pre>${esc(r.sql)}</pre></details>` : ""}
+  </details>`;
+}
+const mask = (k, v) => /pass|secret|token|key|credential/i.test(k) && !/^\$\{/.test(String(v)) ? "••••••"
+  : String(v).replace(/(:\/\/[^:@\/]+:)([^@]+)(@)/, (m, a, p, b) => /^\$\{/.test(p) ? m : a + "••••" + b);
+
+// ------------------------------------------------------------------ pages
+const PAGES = {
+  overview() {
+    const st = currentState(), p = st.project, L = E.store.listRuns(1)[0];
+    const issues = st.results.filter(r => ["fail", "warn", "error"].includes(r.status)).sort((a, b) => ORDER[a.status] - ORDER[b.status] || a.check_id.localeCompare(b.check_id));
+    const fails = issues.filter(i => i.status === "fail").length, warns = issues.filter(i => i.status === "warn").length;
+    const score = mean(st.results.map(r => r.score));
+    const dims = Object.fromEntries(DQ.DIMENSIONS.map(d => [d, mean(st.results.filter(r => r.dimension === d).map(r => r.score))]));
+    const nChecks = Object.values(p.assets).reduce((n, a) => n + DQ.expandChecks(a).length, 0);
+    let introHidden = false; try { introHidden = localStorage.getItem("dq-intro") === "hide"; } catch (e) {}
+    return topbar(esc(p.name), L ? `<span class="muted small">Last run ${when(L.finished_at || L.started_at)}${L.scope !== "all" ? " (" + esc(L.scope) + ")" : ""} · <span class="pill ${L.status}">${L.status}</span></span>` : "") + `
+    ${introHidden ? "" : `<div class="intro"><div style="display:flex;gap:4px 10px;align-items:baseline;flex-wrap:wrap"><b>This prototype is live.</b>
+      <span class="muted small" style="flex:1 1 280px">Every check below is real SQL running against a sample ERP and warehouse, inside your browser on SQLite. The sample data is synthetic and seeded with typical defects.</span>
+      <button class="ghost small" data-act="hide-intro">Hide</button></div>
+      <div class="steps">
+        <div class="step"><span class="n">1</span><span><b>Break something.</b> Under <i>Simulate an incident</i>, apply one, then click <b>Run all checks</b>.</span></div>
+        <div class="step"><span class="n">2</span><span><b>Investigate.</b> Open <a href="#issues">Issues</a> for bad rows and SQL, and <a href="#lineage">Lineage</a> for what it breaks downstream.</span></div>
+        <div class="step"><span class="n">3</span><span><b>Bring your own data.</b> In <a href="#sources">Sources</a>, upload a CSV, register it, then accept the suggested checks.</span></div>
+      </div></div>`}
+    <div class="grid tiles">
+      <div class="card tile"><div class="label">Quality score</div><div class="value ${scoreCls(score)}">${fmtScore(score)}</div></div>
+      <div class="card tile"><div class="label">Failing checks</div><div class="value ${fails ? "bad" : ""}">${fails}</div></div>
+      <div class="card tile"><div class="label">Warnings</div><div class="value ${warns ? "ok" : ""}">${warns}</div></div>
+      <div class="card tile"><div class="label">Checks</div><div class="value">${nChecks}</div></div>
+      <div class="card tile"><div class="label">Assets · sources</div><div class="value">${Object.keys(p.assets).length}<span class="muted" style="font-size:18px"> · ${Object.keys(p.connections).length}</span></div></div>
+    </div>
+    <div class="grid two section">
+      <div class="card"><h2>Quality score trend <span class="muted small">(full runs)</span></h2>${trendSvg(E.store.scoreTrend(30))}</div>
+      <div class="card"><h2>Score by dimension <span class="muted small">(current state)</span></h2>${dimBars(dims)}</div>
+    </div>
+    <div class="grid two section">
+      <div class="card"><h2>Open issues</h2>
+        ${issues.length ? `<table><tbody>${issues.slice(0, 8).map(i => `<tr class="click" data-act="issue-q" data-arg="${attr(i.check_id)}">
+          <td style="width:70px"><span class="pill ${i.status}">${i.status}</span></td><td><b>${esc(i.check_id)}</b><div class="muted small">${esc(i.message)}</div></td></tr>`).join("")}</tbody></table>
+          ${issues.length > 8 ? `<p style="margin-bottom:0"><a href="#issues">All ${issues.length} issues →</a></p>` : ""}` : `<div class="empty">No open issues. Every check passed.</div>`}
+      </div>
+      <div class="card"><h2>Simulate an incident</h2><p class="muted small" style="margin-top:-6px">Each one changes the sample databases the way a real incident would. Run the checks afterwards to see what gets caught.</p>
+        ${Object.entries(DQ.INCIDENTS).map(([k, v]) => `<div class="inc"><span>${esc(v)}</span><button data-act="incident" data-arg="${k}">Apply</button></div>`).join("")}
+        <div class="inc"><span class="muted">Start over with fresh sample data and history</span><button class="danger" data-act="reset">Reset demo</button></div></div>
+    </div>`;
+  },
+
+  issues() {
+    const runId = S.params.run || null, d = currentState(runId);
+    if (!d.run) return topbar("Issues") + `<div class="card empty">No runs yet.</div>`;
+    S.issues = d;
+    S.filter = { status: S.params.q ? "all" : "open", asset: "", dim: "", q: S.params.q || "" };
+    const assets = [...new Set(d.results.map(r => r.asset))].sort(), dims = [...new Set(d.results.map(r => r.dimension))].sort();
+    const sub = d.run.current ? "current state · latest result of every check"
+      : `run ${esc(d.run.run_id)} · ${when(d.run.started_at)}${d.run.scope !== "all" ? " · " + esc(d.run.scope) : ""} · <a data-act="issues-current">back to current state</a>`;
+    return topbar(`Issues <span class="muted small" style="font-weight:400">${sub}</span>`) + `
+      <div class="filters">
+        <div class="seg" id="seg">${["open","fail","warn","error","pass","all"].map(s => `<button data-s="${s}" class="${s === S.filter.status ? "on" : ""}">${s === "open" ? "Open issues" : s[0].toUpperCase() + s.slice(1)}</button>`).join("")}</div>
+        <select id="f-asset" aria-label="Asset"><option value="">All assets</option>${assets.map(a => `<option>${esc(a)}</option>`).join("")}</select>
+        <select id="f-dim" aria-label="Dimension"><option value="">All dimensions</option>${dims.map(a => `<option>${esc(a)}</option>`).join("")}</select>
+        <input id="f-q" placeholder="Search checks…" value="${attr(S.filter.q)}" style="flex:1;min-width:150px" aria-label="Search checks">
+      </div><div id="issue-list"></div>`;
+  },
+
+  assets() {
+    if (S.params.asset) return assetDetail(S.params.asset);
+    const list = assetsView();
+    return topbar("Assets", `<button data-act="nav" data-arg="sources">+ Register a table</button>`) + `
+      <div class="card scroll"><table><thead><tr><th>Asset</th><th>Source · table</th><th>Owner</th><th class="num">Score</th>
+        <th class="num">Checks</th><th>Latest</th></tr></thead><tbody>
+      ${list.map(a => { const f = a.checks.filter(c => c.status === "fail").length, w = a.checks.filter(c => c.status === "warn").length;
+        return `<tr class="click" data-act="asset" data-arg="${attr(a.name)}"><td><b>${esc(a.name)}</b>${a.tags.map(t => ` <span class="chip">${esc(t)}</span>`).join("")}</td>
+        <td class="muted">${esc(a.connection)} · <code>${esc(a.table)}</code></td><td>${esc(a.owner || "—")}</td>
+        <td class="num ${scoreCls(a.score)}"><b>${fmtScore(a.score)}</b></td><td class="num">${a.checks.length}</td>
+        <td>${f ? `<span class="pill fail">${f} fail</span> ` : ""}${w ? `<span class="pill warn">${w} warn</span>` : ""}${!f && !w && a.score !== null ? `<span class="pill pass">ok</span>` : ""}${a.score === null ? `<span class="muted small">not run</span>` : ""}</td></tr>`; }).join("")}
+      </tbody></table></div>`;
+  },
+
+  lineage() {
+    const d = currentState();
+    S.assetsCache = assetsView();
+    const svg = DQ.lineageSvg(d.graph, d.status);
+    return topbar("Lineage & impact") + `<div class="card">
+      <p class="muted small" style="margin-top:0"><span class="key" style="border-color:var(--bad)"></span>failing<span class="key" style="border-color:var(--ok)"></span>warning<span class="key" style="border-color:var(--info)"></span>downstream of an issue<span class="key" style="border-color:var(--good)"></span>healthy · dashed = outside system · built from declared jobs, SQL transforms and database views</p>
+      <div class="scroll" id="lin">${svg || `<div class="empty">No lineage yet. Add edges under <code>lineage:</code> in Config.</div>`}</div></div>
+      <div class="card section" id="lin-detail"><div class="muted">Select a node to see what feeds it and what it affects.</div></div>`;
+  },
+
+  sources() {
+    const raw = jsyaml.load(E.configText) || {};
+    const conns = Object.entries(raw.connections || {});
+    return topbar("Sources") + `
+      <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(min(280px,100%),1fr))">
+      ${conns.map(([n, c]) => `<div class="card"><div style="display:flex;justify-content:space-between;gap:8px;align-items:center">
+          <b style="font-size:15px">${esc(n)}</b><span class="chip">${esc(c.type)}</span></div>
+          <dl class="kv small" style="grid-template-columns:90px minmax(0,1fr)">${Object.entries(c).filter(([k]) => k !== "type").map(([k, v]) => `<dt>${esc(k)}</dt><dd style="word-break:break-all"><code>${esc(mask(k, v))}</code></dd>`).join("")}</dl>
+          <div style="display:flex;gap:8px;flex-wrap:wrap"><button data-act="test" data-arg="${attr(n)}">Test connection</button>
+          <button data-act="browse" data-arg="${attr(n)}">Browse tables</button></div><div class="small" id="t-${attr(n)}" style="margin-top:8px"></div></div>`).join("")}
+      </div>
+      <div class="card section" id="browse" hidden></div>
+      <div class="grid two section">
+        <div class="card"><h2>Upload your own data</h2>
+          <p class="muted small" style="margin-top:-6px">CSV with a header row. The file is loaded into SQLite in this browser tab and never leaves it. It appears as a table under the <b>uploads</b> source.</p>
+          <label class="drop" id="drop" for="csv"><b>Choose a CSV file</b> or drop it here<br><span class="small">Comma, semicolon, tab or pipe separated</span></label>
+          <input type="file" id="csv" accept=".csv,.tsv,.txt,text/csv" hidden>
+          <div id="up-msg" class="small" style="margin-top:8px"></div></div>
+        <div class="card"><h2>Add a source</h2>
+          <div class="form">
+            <label class="f">Name<input id="c-name" placeholder="e.g. gcp_analytics"></label>
+            <label class="f">Type<select id="c-type">
+              <option value="bigquery">BigQuery (GCP)</option><option value="sqlalchemy">Database URL (Postgres, SQL Server, Oracle, Snowflake, SAP HANA…)</option></select></label>
+          </div><div class="form" id="c-fields" style="margin-top:10px"></div>
+          <p class="muted small">Saved to the project config, ready for the server edition. Use <code>\${ENV_VAR}</code> for passwords and keys. Live warehouse connections need the server edition, because a browser page can't open database connections.</p>
+          <button class="primary" data-act="add-conn">Add source</button></div>
+      </div>`;
+  },
+
+  history() {
+    const runs = E.store.listRuns(100);
+    return topbar("Run history") + `<div class="card"><h2>Score over full runs</h2>${trendSvg(E.store.scoreTrend(100))}</div>
+      <div class="card section scroll"><table><thead><tr><th>Run</th><th>When</th><th>Status</th><th class="num">Score</th>
+      <th class="num">Checks</th><th class="num">Failed</th><th class="num">Warn</th><th class="num">Errors</th></tr></thead><tbody>
+      ${runs.map(r => `<tr class="click" data-act="open-run" data-arg="${attr(r.run_id)}"><td><code>${esc(r.run_id)}</code>${r.scope !== "all" ? `<div class="muted small">${esc(r.scope)}</div>` : ""}</td>
+        <td>${when(r.started_at)}</td><td><span class="pill ${r.status}">${esc(r.status)}</span></td><td class="num ${scoreCls(r.score)}"><b>${fmtScore(r.score)}</b></td>
+        <td class="num">${r.checks}</td><td class="num">${r.failed}</td><td class="num">${r.warned}</td><td class="num">${r.errored}</td></tr>`).join("")}
+      </tbody></table></div>`;
+  },
+
+  config() {
+    return topbar("Configuration", `<button data-act="copy-config">Copy YAML</button><button data-act="save-config">Save</button>`) + `
+      <p class="muted small" style="margin-top:-8px">The project file: sources, assets, checks and lineage. The same file works with the Python edition (<code>python -m dq_platform run -p dq_project.yml</code>).
+      It is validated before saving. Check types: ${Object.keys(DQ.CHECKS).sort().map(t => `<code>${t}</code>`).join(", ")}. Formats: ${Object.keys(DQ.FORMATS).join(", ")}. ERP packs: ${Object.entries(DQ.PACKS).map(([k, v]) => `<code>${k}</code> (${Object.keys(v.mappings).join(", ")})`).join("; ")}.</p>
+      <textarea class="code" id="cfg" spellcheck="false" aria-label="Project configuration">${esc(E.configText)}</textarea>`;
+  },
+};
+
+function assetDetail(name) {
+  const a = assetsView().find(x => x.name === name);
+  if (!a) return `<div class="card empty">Asset ${esc(name)} not found. <a href="#assets">Back to assets</a></div>`;
+  S.asset = a;
+  const chip = xs => xs.length ? xs.map(x => `<span class="chip">${esc(x)}</span>`).join("") : `<span class="muted">none</span>`;
+  return `<div class="top"><h1><a href="#assets" class="muted" style="font-weight:400" data-act="nav" data-arg="assets">Assets /</a> ${esc(a.name)}</h1>
+      <button data-act="profile">Profile &amp; suggest checks</button>${runBtn("▶ Run this asset", a.name)}</div>
+    <div class="grid two"><div class="card"><dl class="kv" style="margin:0">
+      <dt>Source · table</dt><dd>${esc(a.connection)} · <code>${esc(a.table)}</code></dd>
+      <dt>Owner</dt><dd>${esc(a.owner || "—")}</dd>${a.description ? `<dt>Description</dt><dd>${esc(a.description)}</dd>` : ""}
+      <dt>Upstream</dt><dd>${chip(a.upstream)}</dd><dt>Downstream</dt><dd>${chip(a.downstream)}</dd></dl></div>
+      <div class="card tile"><div class="label">Asset score (current)</div><div class="value ${scoreCls(a.score)}">${fmtScore(a.score)}</div>
+      <div class="muted small">${a.checks.length} checks · <button class="ghost danger small" data-act="del-asset">Remove asset</button></div></div></div>
+    <div class="card section scroll"><h2>Checks</h2>${a.checks.length ? `<table><thead><tr><th>Status</th><th>Check</th><th>Type</th><th>Severity</th><th>Latest result</th><th></th></tr></thead><tbody>
+      ${a.checks.map(c => `<tr><td><span class="pill ${c.status || "none"}">${c.status || "not run"}</span></td><td><b>${esc(c.id)}</b></td>
+        <td>${esc(c.type)}${c.column && c.type !== "schema" ? ` <span class="muted">· ${esc(Array.isArray(c.column) ? c.column.join(" + ") : c.column)}</span>` : ""}</td><td>${esc(c.severity)}</td>
+        <td class="muted small">${esc(c.message || "")}</td><td><button class="ghost" title="Remove check" aria-label="Remove ${attr(c.id)}" data-act="del-check" data-arg="${attr(c.id)}">✕</button></td></tr>`).join("")}
+    </tbody></table>` : `<div class="empty">No checks yet. Profile the table to get suggestions.</div>`}</div>
+    <div class="card section"><h2>Add a check</h2><div class="form">
+      <label class="f">Type<select id="k-type">${["not_null","unique","accepted_values","range","regex","expression","freshness","row_count","schema","volume_anomaly","referential_integrity","reconciliation","custom_sql"].map(t => `<option>${t}</option>`).join("")}</select></label>
+      <label class="f">Column<input id="k-col" placeholder="column name"></label>
+      <label class="f">Severity<select id="k-sev"><option>error</option><option>warn</option></select></label>
+      <label class="f" style="grid-column:1/-1">Extra settings (JSON)<input id="k-extra" placeholder='e.g. {"min": 0} · {"values": ["A","B"]} · {"format": "email"} · {"max_age": "6h"}'></label>
+      </div><div style="margin-top:10px"><button class="primary" data-act="add-check">Add check</button></div></div>
+    <div id="profile"></div>`;
+}
+
+// ------------------------------------------------------------------ actions
+const ACTIONS = {
+  nav: (el, arg) => go(arg),
+  asset: (el, arg) => go("assets", { asset: arg }),
+  "issue-q": (el, arg) => go("issues", { q: arg }),
+  "issues-current": () => go("issues"),
+  "open-run": (el, arg) => go("issues", { run: arg }),
+  "hide-intro": () => { try { localStorage.setItem("dq-intro", "hide"); } catch (e) {} route(); },
+  run: (el, arg) => busy(el, "Running checks…", () => {
+    const t0 = performance.now();
+    const r = E.run({ assets: arg ? [arg] : null });
+    const c = r.counts;
+    toast(`Run ${r.status.toUpperCase()} · score ${fmtScore(r.score)} · ${c.fail || 0} failed, ${c.warn || 0} warnings · ${c.total} checks in ${((performance.now() - t0) / 1000).toFixed(2)}s`);
+    Object.entries(r.connection_errors).forEach(([k, v]) => toast(`Source ${k}: ${v}`, true));
+    refreshShell(); route();
+  }),
+  incident: (el, arg) => busy(el, "Applying…", () => { const m = DQ.applyIncident(E.dbs, arg); toast(`Applied: ${m}. Now run the checks.`); el.textContent = "Applied ✓"; }),
+  reset: (el) => { if (!confirmClick(el)) return; busy(el, "Rebuilding…", () => { E.reset(); for (let i = 0; i < 5; i++) E.run(); toast("Demo reset with fresh sample data"); refreshShell(); go("overview"); }); },
+  profile: (el) => busy(el, "Profiling…", () => {
+    const p = E.project(), a = p.assets[S.asset.name];
+    const prof = DQ.profileAsset(E.openConn(a.connection, p.connections[a.connection]), a);
+    const existing = new Set(DQ.expandChecks(a).map(c => c.type + "|" + String(c.column || c.columns || "")));
+    const typesPresent = new Set(DQ.expandChecks(a).map(c => c.type));
+    S.sugg = DQ.suggestChecks(prof).map(c => ({ check: c, exists: existing.has(c.type + "|" + String(c.column || (c.type === "schema" ? "" : c.columns || ""))) || (["schema", "row_count", "volume_anomaly"].includes(c.type) && typesPresent.has(c.type)) }));
+    $("#profile").innerHTML = `<div class="card section scroll"><h2>Profile <span class="muted small">${prof.rows} rows · ${prof.columns.length} columns</span></h2>
+      <table><thead><tr><th>Column</th><th>Type</th><th class="num">Null %</th><th class="num">Distinct</th><th>Min</th><th>Max</th><th>Top values</th></tr></thead><tbody>
+      ${prof.columns.map(c => `<tr><td><b>${esc(c.name)}</b></td><td class="muted">${esc(c.type || "—")}</td><td class="num ${c.null_pct > 0 ? "ok" : ""}">${c.null_pct}</td>
+        <td class="num">${c.distinct}</td><td class="small">${esc(c.min)}</td><td class="small">${esc(c.max)}</td>
+        <td class="small">${(c.top_values || []).map(([v, n]) => `<span class="chip">${esc(v)} · ${n}</span>`).join("")}</td></tr>`).join("")}
+      </tbody></table></div>
+      <div class="card section"><h2>Suggested checks</h2><p class="muted small" style="margin-top:-6px">Derived from the profile. Review the thresholds before adopting them.</p>
+      ${S.sugg.map((s, i) => `<label style="display:flex;gap:10px;align-items:flex-start;padding:6px 0;border-bottom:1px solid var(--line)">
+        <input type="checkbox" data-i="${i}" ${s.exists ? "disabled" : "checked"}><span style="min-width:0"><b>${esc(s.check.type)}</b>${s.check.column ? ` on <code>${esc(s.check.column)}</code>` : ""}
+        <span class="muted small" style="overflow-wrap:anywhere">${esc(Object.fromEntries(Object.entries(s.check).filter(([k]) => !["type","column"].includes(k))))}</span>
+        ${s.exists ? `<span class="chip">already covered</span>` : ""}</span></label>`).join("")}
+      <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap"><button class="primary" data-act="accept">Add selected checks and run</button></div></div>`;
+    $("#profile").scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+  }),
+  accept: (el) => {
+    const picks = [...document.querySelectorAll("#profile input[type=checkbox]:checked:not(:disabled)")].map(i => S.sugg[+i.dataset.i].check);
+    if (!picks.length) return toast("Nothing selected");
+    busy(el, "Adding…", () => {
+      const name = S.asset.name;
+      E.editRaw(raw => { (raw.assets[name].checks = raw.assets[name].checks || []).push(...picks); });
+      const r = E.run({ assets: [name] });
+      toast(`Added ${picks.length} checks to ${name} and ran them: ${r.counts.fail || 0} failed, ${r.counts.warn || 0} warnings`);
+      refreshShell(); route();
+    });
+  },
+  "add-check": (el) => {
+    let extra = {};
+    try { extra = $("#k-extra").value.trim() ? JSON.parse($("#k-extra").value) : {}; } catch (e) { return toast("Extra settings must be valid JSON, e.g. {\"min\": 0}", true); }
+    const chk = { type: $("#k-type").value, ...extra };
+    if ($("#k-col").value.trim()) chk.column = $("#k-col").value.trim();
+    if ($("#k-sev").value === "warn") chk.severity = "warn";
+    busy(el, "Adding…", () => { const n = S.asset.name; E.editRaw(raw => { (raw.assets[n].checks = raw.assets[n].checks || []).push(chk); }); toast("Check added. Run the asset to evaluate it."); refreshShell(); route(); });
+  },
+  "del-check": (el, id) => {
+    if (!confirmClick(el, "Remove?")) return;
+    const name = S.asset.name;
+    try {
+      let removed = false;
+      E.editRaw(raw => {
+        const list = raw.assets[name].checks || [];
+        const i = list.findIndex(c => DQ.expandChecks({ name, checks: [c] }).some(x => x.id === id));
+        if (i >= 0) { list.splice(i, 1); removed = true; }
+      });
+      if (!removed) return toast("That check comes from an ERP pack or a cross-asset rule. Edit it in Config.", true);
+      toast("Check removed"); refreshShell(); route();
+    } catch (e) { toast(e.message, true); }
+  },
+  "del-asset": (el) => {
+    if (!confirmClick(el, "Click again to remove")) return;
+    const name = S.asset.name;
+    try {
+      E.editRaw(raw => {
+        delete raw.assets[name];
+        raw.checks = (raw.checks || []).filter(c => ![c.source, c.asset, c.target].includes(name));
+        raw.lineage = (raw.lineage || []).filter(e => ![].concat(e.from, e.to).includes(name));
+        for (const a of Object.values(raw.assets)) a.checks = (a.checks || []).filter(c => !(c.references && c.references.asset === name));
+      });
+      toast(`Removed ${name}`); refreshShell(); go("assets");
+    } catch (e) { toast(e.message, true); }
+  },
+  test: (el, name) => busy(el, "Testing…", () => {
+    const p = E.project(), t0 = performance.now();
+    try { const c = E.openConn(name, p.connections[name]); const n = c.listTables().length;
+      $(`#t-${CSS.escape(name)}`).innerHTML = `<span class="good">✓ Connected</span> · ${n} tables · sqlite · ${Math.round(performance.now() - t0)} ms`;
+    } catch (e) { $(`#t-${CSS.escape(name)}`).innerHTML = `<span class="bad">✗ ${esc(e.message)}</span>`; }
+  }),
+  browse: (el, name) => busy(el, "Loading…", () => {
+    const p = E.project(), c = E.openConn(name, p.connections[name]);
+    const reg = new Set(Object.values(p.assets).filter(a => a.connection === name).map(a => a.table.toLowerCase()));
+    const tables = c.listTables(), box = $("#browse"); box.hidden = false;
+    box.innerHTML = `<h2>Tables in ${esc(name)}</h2>${tables.length ? `<div class="scroll"><table><thead><tr><th>Table</th><th class="num">Rows</th><th>Columns</th><th></th></tr></thead><tbody>
+      ${tables.map(t => { const cols = c.getColumns(t), n = c.scalar(`SELECT COUNT(*) FROM "${t.replace(/"/g, '""')}"`);
+        return `<tr><td><code>${esc(t)}</code></td><td class="num">${n}</td><td class="small">${cols.map(([cn, ty]) => `<span class="chip">${esc(cn)} <span class="muted">${esc(ty || "")}</span></span>`).join("")}</td>
+        <td style="text-align:right">${reg.has(t.toLowerCase()) ? `<span class="chip">registered</span>` : `<button data-act="reg-open" data-arg="${attr(name + "|" + t)}">Register as asset</button>`}</td></tr>`; }).join("")}
+      </tbody></table></div>` : `<div class="empty">No tables yet${name === "uploads" ? ". Upload a CSV below" : ""}.</div>`}<div id="reg-form"></div>`;
+    box.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }),
+  "reg-open": (el, arg) => {
+    const [conn, table] = arg.split("|");
+    $("#reg-form").innerHTML = `<h3>Register <code>${esc(table)}</code> from ${esc(conn)}</h3>
+      <div class="inline-form"><input id="r-name" aria-label="Asset name" value="${attr(table.split(".").pop().toLowerCase().replace(/[^a-z0-9_]/g, "_"))}">
+      <input id="r-owner" aria-label="Owner" placeholder="Owner (team or person, optional)">
+      <button class="primary" data-act="reg" data-arg="${attr(arg)}">Register and profile</button></div>`;
+    $("#r-name").focus();
+  },
+  reg: (el, arg) => {
+    const [conn, table] = arg.split("|"), name = $("#r-name").value.trim(), owner = $("#r-owner").value.trim();
+    if (!/^[A-Za-z_][\w-]*$/.test(name)) return toast("Asset names use letters, digits, _ or - and start with a letter", true);
+    try {
+      E.editRaw(raw => {
+        raw.assets = raw.assets || {};
+        if (raw.assets[name]) throw new Error(`An asset called ${name} already exists`);
+        raw.assets[name] = { connection: conn, table, ...(owner ? { owner } : {}), checks: [{ type: "row_count", min: 1 }] };
+      });
+    } catch (e) { return toast(e.message, true); }
+    refreshShell(); go("assets", { asset: name });
+    setTimeout(() => { const b = document.querySelector('[data-act="profile"]'); b && b.click(); }, 60);
+  },
+  "add-conn": (el) => {
+    const name = $("#c-name").value.trim(), settings = { type: $("#c-type").value };
+    document.querySelectorAll("#c-fields input").forEach(i => { if (i.value.trim()) settings[i.dataset.k] = i.dataset.k === "maximum_bytes_billed" ? Number(i.value) : i.value.trim(); });
+    if (!/^[A-Za-z_][\w-]*$/.test(name)) return toast("Source names use letters, digits, _ or - and start with a letter", true);
+    try { E.editRaw(raw => { raw.connections = raw.connections || {}; if (raw.connections[name]) throw new Error(`A source called ${name} already exists`); raw.connections[name] = settings; }); }
+    catch (e) { return toast(e.message, true); }
+    toast(`Added ${name} to the config. Its connection test will explain what the browser edition can and can't reach.`); refreshShell(); route();
+  },
+  "save-config": (el) => { try { E.saveConfig($("#cfg").value); toast("Saved and validated"); refreshShell(); } catch (e) { toast("Not saved: " + e.message, true); } },
+  "copy-config": async (el) => {
+    try { await navigator.clipboard.writeText($("#cfg").value); toast("Config copied. Save it as dq_project.yml for the Python edition."); }
+    catch (e) { const t = $("#cfg"); t.focus(); t.select(); toast("Press Ctrl+C (⌘C) to copy the selected config"); }
+  },
+};
+document.addEventListener("click", e => {
+  const el = e.target.closest("[data-act]");
+  if (!el || !E) return;
+  e.preventDefault();
+  ACTIONS[el.dataset.act]?.(el, el.dataset.arg);
+});
+
+// ------------------------------------------------------------------ page wiring
+const CONN_FIELDS = {
+  bigquery: [["project", "GCP project id", "${GCP_PROJECT}"], ["dataset", "Dataset", "analytics"], ["location", "Location (optional)", "EU"], ["maximum_bytes_billed", "Max bytes billed per query", "10000000000"]],
+  sqlalchemy: [["url", "SQLAlchemy URL", "postgresql+psycopg2://${PG_USER}:${PG_PASSWORD}@host:5432/db"], ["schema", "Schema (optional)", "public"]],
+};
+function wireSources() {
+  const fields = () => { $("#c-fields").innerHTML = CONN_FIELDS[$("#c-type").value].map(([k, l, ph]) => `<label class="f">${l}<input data-k="${k}" placeholder="${attr(ph)}"></label>`).join(""); };
+  $("#c-type").onchange = fields; fields();
+  const drop = $("#drop"), input = $("#csv");
+  const load = async file => {
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const table = file.name.replace(/\.[^.]+$/, "").toLowerCase().replace(/[^a-z0-9_]+/g, "_").replace(/^_+|_+$/g, "") || "upload";
+      const info = DQ.importCsv(E.dbs.uploads, table, text);
+      E.editRaw(raw => { raw.connections = raw.connections || {}; raw.connections.uploads = raw.connections.uploads || { type: "files", path: "uploads" }; });
+      refreshShell(); route();
+      $("#up-msg").innerHTML = `<span class="good">✓ Loaded <b>${esc(info.table)}</b>: ${info.rows} rows, ${info.columns} columns.</span> Register it in the table list above.`;
+      setTimeout(() => { const b = document.querySelector('[data-act="browse"][data-arg="uploads"]'); b && b.click(); }, 60);
+      toast(`Loaded ${file.name} as table ${info.table}`);
+    } catch (e) { toast(`Couldn't read ${file.name}: ${e.message}`, true); }
+  };
+  input.onchange = () => load(input.files[0]);
+  drop.ondragover = e => { e.preventDefault(); drop.classList.add("over"); };
+  drop.ondragleave = () => drop.classList.remove("over");
+  drop.ondrop = e => { e.preventDefault(); drop.classList.remove("over"); load(e.dataTransfer.files[0]); };
+}
+function renderIssues() {
+  const d = S.issues, f = S.filter, q = (f.q || "").toLowerCase();
+  const rows = d.results.filter(r =>
+    (f.status === "all" || (f.status === "open" ? ["fail", "warn", "error"].includes(r.status) : r.status === f.status)) &&
+    (!f.asset || r.asset === f.asset) && (!f.dim || r.dimension === f.dim) &&
+    (!q || (r.check_id + " " + r.message).toLowerCase().includes(q))
+  ).sort((a, b) => (ORDER[a.status] - ORDER[b.status]) || a.check_id.localeCompare(b.check_id));
+  $("#issue-list").innerHTML = rows.length ? rows.map((r, i) => issueCard(r, d.impact, rows.length <= 3 || (i < 2 && r.status === "fail"))).join("")
+    : `<div class="card empty">Nothing matches these filters.</div>`;
+}
+function wireIssues() {
+  $("#seg").onclick = e => { const s = e.target.dataset.s; if (!s) return; S.filter.status = s;
+    [...$("#seg").children].forEach(b => b.classList.toggle("on", b.dataset.s === s)); renderIssues(); };
+  $("#f-asset").onchange = e => { S.filter.asset = e.target.value; renderIssues(); };
+  $("#f-dim").onchange = e => { S.filter.dim = e.target.value; renderIssues(); };
+  $("#f-q").oninput = e => { S.filter.q = e.target.value; renderIssues(); };
+  renderIssues();
+}
+function wireLineage() {
+  const svg = $("#lin svg"); if (!svg) return;
+  svg.addEventListener("click", e => {
+    const n = e.target.closest(".node"); if (!n) return;
+    svg.querySelectorAll(".node").forEach(x => x.classList.remove("sel")); n.classList.add("sel");
+    const id = n.dataset.node, a = (S.assetsCache || []).find(x => x.name === id);
+    const chips = xs => xs && xs.length ? xs.map(x => `<span class="chip">${esc(x)}</span>`).join("") : `<span class="muted">none</span>`;
+    $("#lin-detail").innerHTML = a ? `<h2>${esc(id)}</h2><dl class="kv"><dt>Source · table</dt><dd>${esc(a.connection)} · <code>${esc(a.table)}</code></dd>
+      <dt>Owner</dt><dd>${esc(a.owner || "—")}</dd><dt>Score</dt><dd class="${scoreCls(a.score)}"><b>${fmtScore(a.score)}</b></dd>
+      <dt>Fed by</dt><dd>${chips(a.upstream)}</dd><dt>Affects</dt><dd>${chips(a.downstream)}</dd></dl><a data-act="asset" data-arg="${attr(id)}">Open asset →</a>`
+      : `<h2>${esc(id)}</h2><p class="muted" style="margin-bottom:0">A system outside the checked assets, known from declared lineage.</p>`;
+  });
+}
+const ROUTES = ["overview", "issues", "assets", "lineage", "sources", "history", "config"];
+function route() {
+  if (!E) return;
+  let page = location.hash.slice(1);
+  if (!ROUTES.includes(page)) page = "overview";
+  document.querySelectorAll("#nav a").forEach(a => a.classList.toggle("active", a.dataset.r === page));
+  try {
+    $("#main").innerHTML = PAGES[page]();
+    if (page === "issues" && S.issues && $("#issue-list")) wireIssues();
+    if (page === "lineage") wireLineage();
+    if (page === "sources") wireSources();
+  } catch (e) {
+    console.error(e);
+    $("#main").innerHTML = `<div class="card empty bad">${esc(e.message)}</div>`;
+  }
+}
+window.addEventListener("hashchange", () => { if (!S.keep) S.params = S.next || {}; S.next = null; route(); });
+// `go` sets params before changing the hash; keep them for the hashchange that follows
+go = (page, params = {}) => { if (location.hash.slice(1) === page) { S.params = params; route(); } else { S.next = params; location.hash = page; } };
+document.querySelectorAll("#nav a").forEach(a => a.addEventListener("click", e => {
+  S.next = {};
+  if (location.hash.slice(1) === a.dataset.r) { e.preventDefault(); S.params = {}; route(); }
+}));
+
+(async function boot() {
+  try {
+    const buf = await (await fetch("vendor/sql-wasm.wasm")).arrayBuffer();
+    const SQL = await initSqlJs({ wasmBinary: buf });
+    E = new DQ.Engine(SQL);
+    for (let i = 0; i < 5; i++) E.run();
+    refreshShell(); route();
+  } catch (e) {
+    $("#main").innerHTML = `<div class="card empty bad"><b>The engine could not start.</b><br>${esc(e.message)}<br><span class="muted small">Reload the page to try again.</span></div>`;
+  }
+})();
+</script>

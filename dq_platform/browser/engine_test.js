@@ -1,0 +1,53 @@
+const path = require('path'); const A = __dirname;
+globalThis.jsyaml = require(A + '/vendor/js-yaml.min.js');
+const initSqlJs = require(A + '/vendor/sql-wasm.js');
+const DQ = require(A + '/dq-engine.js');
+const assert = (c, m) => { if (!c) { console.error('FAIL:', m); process.exitCode = 1; } else console.log('ok  ', m); };
+initSqlJs({ locateFile: f => A + '/vendor/' + f }).then(SQL => {
+  const e = new DQ.Engine(SQL);
+  for (let i = 0; i < 5; i++) e.run();
+  const r = e.run();
+  console.log(r.status, r.score, r.counts);
+  const p = e.project(), cur = Object.fromEntries(e.current(p).map(x => [x.check_id, x]));
+  const errs = Object.values(cur).filter(x => x.status === 'error'); errs.forEach(x => console.log('ERR', x.check_id, x.message));
+  assert(!errs.length, 'no execution errors');
+  assert(cur['erp_customers.id_unique'].status === 'fail', 'duplicate customer found');
+  assert(cur['erp_customers.country_iso'].failed_rows === 2, '2 bad countries');
+  assert(cur['erp_orders.referential_integrity.customer_id'].failed_rows === 5, '5 orphan orders');
+  assert(cur['erp_order_lines.expression'].failed_rows === 4, '4 bad line amounts');
+  assert(cur['stg_orders.freshness._loaded_at'].status === 'fail', 'stale load');
+  assert(cur['erp_orders.reconcile_to_warehouse'].status === 'fail', 'reconciliation mismatch');
+  assert(cur['stg_orders.reconcile_to_fct_sales'].status === 'warn', 'fct loss warned');
+  assert(cur['erp_customers.email_valid'].status === 'pass' && cur['erp_customers.email_valid'].failed_rows === 4, 'email within threshold');
+  assert(cur['erp_orders.fresh'].status === 'pass', 'erp fresh');
+  assert(cur['erp_orders.volume_anomaly'].status === 'pass', 'volume steady');
+  const g = e.lineage(p);
+  assert(g.upstream('fct_sales').includes('stg_orders'), 'lineage from SQL transform');
+  assert(g.upstream('rpt_revenue_by_country').includes('fct_sales'), 'lineage from view');
+  assert(g.downstream('erp_orders').includes('Finance dashboard (BI)'), 'declared lineage');
+  assert(DQ.lineageSvg(g, {}).startsWith('<svg'), 'svg renders');
+  // incidents
+  DQ.applyIncident(e.dbs, 'schema_change'); DQ.applyIncident(e.dbs, 'volume_drop'); DQ.applyIncident(e.dbs, 'bad_batch');
+  e.run(); const c2 = Object.fromEntries(e.current(p).map(x => [x.check_id, x]));
+  assert(c2['erp_customers.schema'].message.includes('vat_id'), 'schema drift: ' + c2['erp_customers.schema'].message);
+  assert(c2['erp_orders.volume_anomaly'].status === 'fail', 'volume anomaly: ' + c2['erp_orders.volume_anomaly'].message);
+  assert(c2['erp_orders.currency_iso'].failed_rows === 12, 'bad batch currency');
+  DQ.applyIncident(e.dbs, 'fix_load'); e.run();
+  const c3 = Object.fromEntries(e.current(p).map(x => [x.check_id, x]));
+  assert(c3['stg_orders.freshness._loaded_at'].status === 'pass', 'fixed load fresh');
+  // profile + csv
+  const conn = e.openConn('erp', p.connections.erp);
+  const prof = DQ.profileAsset(conn, { name: 'products', table: 'products' });
+  const sug = DQ.suggestChecks(prof).map(s => s.type + ':' + (s.column || ''));
+  assert(sug.includes('unique:product_id') && !sug.includes('unique:name'), 'suggestions sane: ' + sug.join(' '));
+  const info = DQ.importCsv(e.dbs.uploads, 'vendors', 'vendor_id,name,country,"amount, eur"\nV1,Acme,DE,10.5\nV2,"Big, Co",XX,\nV2,Dup,FR,3\n');
+  assert(info.rows === 3 && info.columns === 4, 'csv import');
+  e.editRaw(raw => { raw.connections.uploads = { type: 'files', path: 'uploads' }; raw.assets.vendors = { connection: 'uploads', table: 'vendors', checks: [{ type: 'unique', column: 'vendor_id' }, { type: 'regex', column: 'country', format: 'iso_country' }, { type: 'not_null', column: 'amount_eur' }] }; });
+  const rv = e.run({ assets: ['vendors'] });
+  const v = Object.fromEntries(e.current(e.project()).filter(x => x.asset === 'vendors').map(x => [x.check_id, x]));
+  console.log(Object.values(v).map(x => x.check_id + ' ' + x.status + ' ' + x.message));
+  assert(v['vendors.unique.vendor_id'].status === 'fail', 'csv duplicate found');
+  let bad = false; try { e.saveConfig('assets:\n  x: {connection: nope, table: t}'); } catch (err) { bad = true; }
+  assert(bad, 'invalid config rejected');
+  assert(DQ.parseSqlLineage("WITH x AS (SELECT * FROM raw.orders) INSERT INTO mart.fct SELECT * FROM x JOIN `p.d.c` c ON 1=1")[0][0].join() === 'raw.orders,p.d.c', 'sql parser');
+});

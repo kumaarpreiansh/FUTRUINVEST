@@ -13,6 +13,17 @@ SAP HANA, an ERP's own database, or CSV/Parquet extracts.
  Files ────┘                                  └─► lineage graph + downstream impact
 ```
 
+## Browser edition (no install)
+
+`browser/` holds a version that runs entirely in a web page. It uses the same
+YAML project format and checks, scoring, lineage and profiling, on SQLite
+compiled to WebAssembly (sql.js 1.10.2). It ships with the sample ERP and
+warehouse, an incident simulator and CSV upload. It can't open live
+warehouse connections, because a browser page can't reach databases; use the
+server edition below for those. To run it locally, serve the folder
+(`python -m http.server -d dq_platform/browser`) and open `index.html`.
+Engine tests: `node dq_platform/browser/engine_test.js`.
+
 ## Run the prototype (web app)
 
 ```bash
@@ -155,6 +166,7 @@ dq_platform/
   demo.py       sample ERP -> warehouse project + incident simulator
   web.py        JSON API + server for the web app
   ui/           single-page web UI (no build step, no CDN)
+  browser/      browser edition: JS engine + UI on SQLite/WebAssembly
 ```
 
 ## Known limits / next steps
