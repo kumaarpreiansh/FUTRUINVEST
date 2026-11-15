@@ -60,8 +60,8 @@ def suggest_checks(profile: dict) -> list[dict]:
         elif c["null_pct"] < 5 and rows:
             out.append({"type": "not_null", "column": name, "max_failure_pct": max(1.0, round(c["null_pct"] * 2, 1)),
                         "severity": "warn"})
-        if rows and c["non_null"] and c["distinct"] == c["non_null"] and (low.endswith("id") or low in ("key", "code")
-                                                                           or c["distinct"] == rows):
+        key_like = re.search(r"(^|_)(id|key|code|no|num|number)$", low) or low.endswith("id")
+        if rows and c["non_null"] and c["distinct"] == c["non_null"] and key_like:
             out.append({"type": "unique", "column": name})
         if "values" in c and 1 < len(c["values"]) <= 15 and rows >= 50 and not _NUMERIC.search(t):
             out.append({"type": "accepted_values", "column": name, "values": c["values"]})

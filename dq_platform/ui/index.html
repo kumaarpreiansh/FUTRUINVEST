@@ -1,0 +1,554 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DQ Platform</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232f6f5e'/%3E%3Cpath d='M9 16.5l4.5 4.5L23 11.5' stroke='white' stroke-width='3.2' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<style>
+:root {
+  --bg:#f6f6f3; --panel:#ffffff; --panel2:#fafaf7; --ink:#1c1c19; --muted:#696963; --line:#e3e3dd;
+  --accent:#2f6f5e; --accent-ink:#ffffff; --good:#1f8a4c; --ok:#a86d12; --bad:#cf3537; --info:#6e56cf;
+  --code:#f1f1ec; --shadow:0 1px 2px rgba(0,0,0,.04), 0 4px 16px rgba(0,0,0,.04);
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg:#131312; --panel:#1c1c1a; --panel2:#20201e; --ink:#ececea; --muted:#a1a19b; --line:#31312e;
+  --accent:#5fb39b; --accent-ink:#0f1a17; --good:#4cc38a; --ok:#f0b44a; --bad:#ff6b6b; --info:#a78bfa;
+  --code:#252523; --shadow:none; } }
+:root[data-theme="dark"] {
+  --bg:#131312; --panel:#1c1c1a; --panel2:#20201e; --ink:#ececea; --muted:#a1a19b; --line:#31312e;
+  --accent:#5fb39b; --accent-ink:#0f1a17; --good:#4cc38a; --ok:#f0b44a; --bad:#ff6b6b; --info:#a78bfa;
+  --code:#252523; --shadow:none; }
+* { box-sizing:border-box }
+html, body { margin:0; background:var(--bg); color:var(--ink);
+  font:14.5px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+a { color:var(--accent); text-decoration:none } a:hover { text-decoration:underline }
+code, pre, textarea.code { font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:12.5px }
+.app { display:grid; grid-template-columns:220px minmax(0,1fr); min-height:100vh }
+.app > * { min-width:0 }
+aside { border-right:1px solid var(--line); padding:18px 12px; position:sticky; top:0; height:100vh; background:var(--panel2) }
+.brand { display:flex; gap:10px; align-items:center; font-weight:700; font-size:16px; padding:0 8px 18px }
+.brand .logo { width:28px; height:28px; border-radius:8px; background:var(--accent); display:grid; place-items:center }
+nav a { display:flex; gap:10px; align-items:center; padding:8px 10px; border-radius:8px; color:var(--ink); margin-bottom:2px }
+nav a:hover { background:var(--line); text-decoration:none }
+nav a.active { background:var(--accent); color:var(--accent-ink) }
+nav .count { margin-left:auto; font-size:12px; background:var(--bad); color:#fff; border-radius:999px; padding:0 7px }
+nav a.active .count { background:var(--accent-ink); color:var(--accent) }
+.side-foot { position:absolute; bottom:16px; left:20px; right:12px; font-size:12px; color:var(--muted) }
+main { padding:22px 28px 64px; min-width:0 }
+.top { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:18px }
+.top h1 { font-size:22px; margin:0; flex:1; min-width:200px }
+.muted { color:var(--muted) } .small { font-size:12.5px }
+button, .btn { font:inherit; border:1px solid var(--line); background:var(--panel); color:var(--ink); border-radius:8px;
+  padding:7px 13px; cursor:pointer; display:inline-flex; align-items:center; gap:6px; white-space:nowrap }
+button:hover { border-color:var(--muted) }
+button.primary { background:var(--accent); border-color:var(--accent); color:var(--accent-ink); font-weight:600 }
+button.danger { color:var(--bad) }
+button.ghost { border-color:transparent; background:transparent; padding:4px 8px }
+button:disabled { opacity:.55; cursor:progress }
+.spin { width:14px; height:14px; border:2px solid currentColor; border-right-color:transparent; border-radius:50%; animation:r .7s linear infinite }
+@keyframes r { to { transform:rotate(360deg) } }
+.card { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:16px; box-shadow:var(--shadow) }
+.grid { display:grid; gap:14px }
+.tiles { grid-template-columns:repeat(auto-fit,minmax(150px,1fr)) }
+.two { grid-template-columns:minmax(0,3fr) minmax(0,2fr) } @media (max-width:980px) { .two { grid-template-columns:minmax(0,1fr) } }
+.grid > * { min-width:0 }
+.tile .label { color:var(--muted); font-size:12.5px } .tile .value { font-size:28px; font-weight:650; font-variant-numeric:tabular-nums }
+.good { color:var(--good) } .ok { color:var(--ok) } .bad { color:var(--bad) } .info { color:var(--info) }
+h2 { font-size:15px; margin:0 0 12px } h3 { font-size:14px; margin:18px 0 8px }
+.section { margin-top:22px }
+.dim { display:grid; grid-template-columns:110px 1fr 50px; gap:10px; align-items:center; padding:4px 0 }
+.dim b { text-align:right; font-variant-numeric:tabular-nums }
+.bar { height:8px; background:var(--line); border-radius:4px; overflow:hidden } .bar > div { height:100% }
+.bg-good { background:var(--good) } .bg-ok { background:var(--ok) } .bg-bad { background:var(--bad) }
+table { width:100%; border-collapse:collapse }
+th, td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--line); vertical-align:top; overflow-wrap:anywhere }
+th { color:var(--muted); font-weight:600; font-size:11.5px; text-transform:uppercase; letter-spacing:.04em }
+tr.click { cursor:pointer } tr.click:hover td { background:var(--panel2) }
+.num { text-align:right; font-variant-numeric:tabular-nums }
+.scroll { overflow-x:auto }
+.pill { display:inline-block; min-width:52px; text-align:center; padding:0 8px; border-radius:999px; font-size:12px;
+  font-weight:600; border:1px solid currentColor; line-height:20px }
+.pill.fail, .pill.error { color:var(--bad) } .pill.warn { color:var(--ok) } .pill.pass { color:var(--good) }
+.pill.skipped, .pill.none { color:var(--muted) } .pill.running { color:var(--info) }
+.chip { display:inline-block; padding:1px 9px; border-radius:999px; background:var(--code); font-size:12.5px; margin:2px 4px 2px 0 }
+.issue { border-left:4px solid var(--muted); margin-bottom:10px; padding:12px 16px }
+.issue.fail, .issue.error { border-left-color:var(--bad) } .issue.warn { border-left-color:var(--ok) } .issue.pass { border-left-color:var(--good) }
+.issue summary { cursor:pointer; list-style:none } .issue summary::-webkit-details-marker { display:none }
+.issue .head b { overflow-wrap:anywhere } .issue .head { display:flex; gap:10px; align-items:baseline; flex-wrap:wrap }
+dl.kv { display:grid; grid-template-columns:150px 1fr; gap:4px 12px; margin:12px 0 } dl.kv dt { color:var(--muted) } dl.kv dd { margin:0 }
+@media (max-width:600px) { dl.kv { grid-template-columns:1fr } }
+pre { background:var(--code); padding:10px 12px; border-radius:8px; overflow-x:auto; white-space:pre-wrap; margin:6px 0 }
+table.samples { background:var(--code); border-radius:8px; font-size:12.5px } table.samples td, table.samples th { border-color:var(--line) }
+.filters { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:14px }
+select, input, textarea { font:inherit; color:var(--ink); background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:7px 10px }
+input:focus, select:focus, textarea:focus, button:focus-visible { outline:2px solid var(--accent); outline-offset:1px }
+label.f { display:grid; gap:4px; font-size:12.5px; color:var(--muted); min-width:0 } label.f > * { color:var(--ink); font-size:14px; width:100%; min-width:0 }
+.form { display:grid; gap:10px; grid-template-columns:repeat(auto-fit,minmax(min(200px,100%),1fr)); align-items:end }
+textarea.code { width:100%; min-height:62vh; tab-size:2; line-height:1.55; background:var(--code) }
+.seg { display:inline-flex; border:1px solid var(--line); border-radius:8px; overflow-x:auto; max-width:100% }
+.seg button { border:0; border-radius:0; border-right:1px solid var(--line) } .seg button:last-child { border-right:0 }
+.seg button.on { background:var(--accent); color:var(--accent-ink) }
+.empty { text-align:center; padding:36px; color:var(--muted) }
+.toast { position:fixed; right:18px; bottom:18px; display:grid; gap:8px; z-index:9; max-width:min(420px, calc(100vw - 32px)) }
+.toast div { background:var(--ink); color:var(--bg); padding:10px 14px; border-radius:10px; box-shadow:0 6px 24px rgba(0,0,0,.2) }
+.toast div.err { background:var(--bad); color:#fff }
+svg.lineage { display:block; max-width:none; font-size:12.5px }
+svg.lineage .edge { fill:none; stroke:var(--muted); stroke-width:1.4; opacity:.7 }
+svg.lineage .arrow { fill:var(--muted) }
+svg.lineage .node { cursor:pointer }
+svg.lineage .node rect { fill:var(--panel); stroke:var(--line); stroke-width:1.5 }
+svg.lineage .node:hover rect { fill:var(--panel2) }
+svg.lineage .node.sel rect { fill:var(--code) }
+svg.lineage .node text { fill:var(--ink) }
+svg.lineage .node.ext rect { stroke-dasharray:4 3 }
+svg.lineage .node.fail rect { stroke:var(--bad); stroke-width:2.5 }
+svg.lineage .node.warn rect { stroke:var(--ok); stroke-width:2.5 }
+svg.lineage .node.pass rect { stroke:var(--good); stroke-width:2 }
+svg.lineage .node.impacted rect { stroke:var(--info); stroke-width:2.5 }
+.key { display:inline-block; width:10px; height:10px; border-radius:3px; margin:0 4px 0 12px; border:2px solid }
+.trend { width:100%; height:150px } .trend .ln { fill:none; stroke:var(--accent); stroke-width:2 }
+.trend .area { fill:var(--accent); opacity:.1 } .trend text { fill:var(--muted); font-size:11px } .trend .gl { stroke:var(--line) }
+.trend circle { fill:var(--accent) }
+.inc { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px 12px; align-items:center; padding:8px 0; border-bottom:1px solid var(--line) }
+.inc:last-child { border-bottom:0 }
+@media (max-width:820px) {
+  .app { grid-template-columns:minmax(0,1fr) }
+  aside { position:sticky; top:0; height:auto; z-index:5; padding:10px 12px; border-right:0; border-bottom:1px solid var(--line) }
+  .brand { padding:0 4px 8px } .side-foot { display:none }
+  nav { display:flex; overflow-x:auto; gap:4px } nav a { flex:none; margin:0 }
+  main { padding:16px 16px 64px }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside>
+    <div class="brand"><span class="logo"><svg width="16" height="16" viewBox="0 0 32 32"><path d="M7 16.5l5.5 5.5L25 10" stroke="white" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span>DQ Platform</div>
+    <nav id="nav">
+      <a href="#/overview" data-r="overview">Overview</a>
+      <a href="#/issues" data-r="issues">Issues <span class="count" id="issue-count" hidden></span></a>
+      <a href="#/assets" data-r="assets">Assets</a>
+      <a href="#/lineage" data-r="lineage">Lineage</a>
+      <a href="#/sources" data-r="sources">Sources</a>
+      <a href="#/history" data-r="history">History</a>
+      <a href="#/config" data-r="config">Config</a>
+    </nav>
+    <div class="side-foot" id="proj"></div>
+  </aside>
+  <main id="main"><div class="empty">Loading…</div></main>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+const $ = (s, el = document) => el.querySelector(s);
+const esc = v => v === null || v === undefined ? "—" :
+  String(typeof v === "object" ? JSON.stringify(v) : v).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const fmtScore = s => s === null || s === undefined ? "—" : Number(s).toFixed(1);
+const scoreCls = s => s === null || s === undefined ? "muted" : s >= 95 ? "good" : s >= 80 ? "ok" : "bad";
+const when = iso => { if (!iso) return "—"; const d = new Date(iso); const m = Math.round((Date.now() - d) / 60000);
+  return m < 1 ? "just now" : m < 60 ? `${m} min ago` : m < 1440 ? `${Math.round(m/60)} h ago` : d.toLocaleString(); };
+const ORDER = {fail:0, error:1, warn:2, skipped:3, pass:4};
+let STATE = { overview: null };
+
+async function api(path, opts = {}) {
+  const init = { method: opts.method || "GET", headers: {} };
+  if (opts.body !== undefined) { init.body = JSON.stringify(opts.body); init.headers["Content-Type"] = "application/json"; }
+  const r = await fetch(path, init);
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
+  return data;
+}
+function toast(msg, err = false) {
+  const d = document.createElement("div"); d.textContent = msg; if (err) d.className = "err";
+  $("#toast").appendChild(d); setTimeout(() => d.remove(), err ? 7000 : 3500);
+}
+async function busy(btn, fn) {
+  const html = btn.innerHTML; btn.disabled = true; btn.innerHTML = `<span class="spin"></span> ${btn.dataset.busy || "Working…"}`;
+  try { return await fn(); } catch (e) { toast(e.message, true); } finally { btn.disabled = false; btn.innerHTML = html; }
+}
+
+async function runChecks(btn, body = {}) {
+  btn.dataset.busy = "Running checks…";
+  await busy(btn, async () => {
+    const r = await api("/api/run", { method: "POST", body });
+    const c = r.counts;
+    toast(`Run ${r.status.toUpperCase()} · score ${fmtScore(r.score)} · ${c.fail||0} failed, ${c.warn||0} warnings · ${r.seconds}s`);
+    Object.keys(r.connection_errors || {}).forEach(k => toast(`Source ${k}: ${r.connection_errors[k]}`, true));
+    await refreshShell(); route();
+  });
+}
+
+async function refreshShell() {
+  const o = await api("/api/overview"); STATE.overview = o;
+  $("#proj").innerHTML = `<div><b>${esc(o.project)}</b></div><div>${o.sources} sources · ${o.assets} assets · ${o.checks} checks</div>`;
+  const n = o.issues.filter(i => i.status === "fail" || i.status === "error").length;
+  const c = $("#issue-count"); c.hidden = !n; c.textContent = n;
+}
+
+function topbar(title, extra = "") {
+  return `<div class="top"><h1>${title}</h1>${extra}<button class="primary" onclick="runChecks(this)">▶ Run all checks</button></div>`;
+}
+
+function dimBars(dims) {
+  return Object.entries(dims).map(([d, s]) => `<div class="dim"><span>${d[0].toUpperCase() + d.slice(1)}</span>
+    <div class="bar"><div class="bg-${scoreCls(s)}" style="width:${s ?? 0}%"></div></div><b class="${scoreCls(s)}">${fmtScore(s)}</b></div>`).join("");
+}
+
+function trendSvg(runs) {
+  const pts = runs.filter(r => r.score !== null && r.score !== undefined);
+  if (pts.length < 2) return `<div class="empty">The trend appears after two runs.</div>`;
+  const W = 600, H = 150, L = 34, R = 10, T = 10, B = 22;
+  const vals = pts.map(p => p.score), lo = Math.max(0, Math.floor(Math.min(...vals, 90) / 5) * 5), hi = 100;
+  const x = i => L + i * (W - L - R) / (pts.length - 1), y = v => T + (hi - v) / (hi - lo) * (H - T - B);
+  const line = pts.map((p, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(p.score).toFixed(1)}`).join(" ");
+  const grid = [lo, (lo + hi) / 2, hi].map(v => `<line class="gl" x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}"/><text x="${L - 6}" y="${y(v) + 4}" text-anchor="end">${v}</text>`).join("");
+  const dots = pts.map((p, i) => `<circle cx="${x(i)}" cy="${y(p.score)}" r="${i === pts.length - 1 ? 4 : 2.5}"><title>${esc(p.run_id)}: ${fmtScore(p.score)} (${p.status})</title></circle>`).join("");
+  return `<svg class="trend" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Quality score over the last ${pts.length} runs">
+    ${grid}<path class="area" d="${line} L${x(pts.length - 1)},${H - B} L${L},${H - B} Z"/><path class="ln" d="${line}"/>${dots}
+    <text x="${L}" y="${H - 5}">${pts.length} runs ago</text><text x="${W - R}" y="${H - 5}" text-anchor="end">latest</text></svg>`;
+}
+
+function samplesTable(samples) {
+  if (!samples || !samples.length) return "";
+  const cols = [...new Set(samples.flatMap(s => Object.keys(s)))];
+  return `<div class="scroll"><table class="samples"><thead><tr>${cols.map(c => `<th>${esc(c)}</th>`).join("")}</tr></thead>
+    <tbody>${samples.map(s => `<tr>${cols.map(c => `<td>${esc(s[c])}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
+}
+
+function issueCard(r, impact, open = false) {
+  const downs = (impact || {})[r.asset] || [];
+  return `<details class="card issue ${r.status}" ${open ? "open" : ""}>
+    <summary><div class="head"><span class="pill ${r.status}">${r.status}</span><b>${esc(r.check_id)}</b>
+      <span class="muted small">${esc(r.dimension)} · ${esc(r.type)} · ${esc(r.severity)}</span></div>
+      <div style="margin-top:4px">${esc(r.message)}</div></summary>
+    <dl class="kv"><dt>Asset</dt><dd><a href="#/assets/${encodeURIComponent(r.asset)}">${esc(r.asset)}</a></dd>
+      <dt>Observed</dt><dd>${esc(r.observed)}</dd><dt>Expected</dt><dd>${esc(r.expected)}</dd>
+      ${r.total_rows ? `<dt>Rows affected</dt><dd>${r.failed_rows ?? 0} of ${r.total_rows}</dd>` : ""}
+      ${r.status !== "pass" && r.status !== "error" ? `<dt>Downstream impact</dt><dd>${downs.length ? downs.map(d => `<span class="chip">${esc(d)}</span>`).join("") : "none"}</dd>` : ""}
+    </dl>${samplesTable(r.samples)}
+    ${r.sql ? `<details><summary class="muted small" style="cursor:pointer">SQL pushed down to the source</summary><pre>${esc(r.sql)}</pre></details>` : ""}
+  </details>`;
+}
+
+// ------------------------------------------------------------------ pages
+const PAGES = {
+  async overview() {
+    const o = await api("/api/overview"); STATE.overview = o;
+    const L = o.latest;
+    const fails = o.issues.filter(i => i.status === "fail").length, warns = o.issues.filter(i => i.status === "warn").length;
+    let incidents = {};
+    if (o.demo) incidents = await api("/api/demo/incidents");
+    return topbar(esc(o.project), L ? `<span class="muted small">Last run ${when(L.finished_at || L.started_at)}${L.scope && L.scope !== "all" ? " (" + esc(L.scope) + ")" : ""} · <span class="pill ${L.status}">${L.status}</span></span>` : "") + `
+    <div class="grid tiles">
+      <div class="card tile"><div class="label">Quality score</div><div class="value ${scoreCls(o.score)}">${fmtScore(o.score)}</div></div>
+      <div class="card tile"><div class="label">Failing checks</div><div class="value ${fails ? "bad" : ""}">${fails}</div></div>
+      <div class="card tile"><div class="label">Warnings</div><div class="value ${warns ? "ok" : ""}">${warns}</div></div>
+      <div class="card tile"><div class="label">Checks</div><div class="value">${o.checks}</div></div>
+      <div class="card tile"><div class="label">Assets · sources</div><div class="value">${o.assets}<span class="muted" style="font-size:18px"> · ${o.sources}</span></div></div>
+    </div>
+    <div class="grid two section">
+      <div class="card"><h2>Quality score trend <span class="muted small">(full runs)</span></h2>${trendSvg(o.trend)}</div>
+      <div class="card"><h2>Score by dimension <span class="muted small">(current state)</span></h2>${dimBars(o.dimensions)}</div>
+    </div>
+    <div class="grid two section">
+      <div class="card"><h2>Open issues</h2>
+        ${o.issues.length ? `<table><tbody>${o.issues.slice(0, 8).map(i => `<tr class="click" onclick="location.hash='#/issues?q=${encodeURIComponent(i.check_id)}'">
+          <td style="width:70px"><span class="pill ${i.status}">${i.status}</span></td><td><b>${esc(i.check_id)}</b><div class="muted small">${esc(i.message)}</div></td></tr>`).join("")}</tbody></table>
+          ${o.issues.length > 8 ? `<p><a href="#/issues">All ${o.issues.length} issues →</a></p>` : ""}` : `<div class="empty">${L ? "No open issues 🎉" : "No runs yet. Click <b>Run all checks</b>."}</div>`}
+      </div>
+      ${o.demo ? `<div class="card"><h2>Simulate an incident</h2><p class="muted small" style="margin-top:-6px">Change the demo ERP and warehouse, then run the checks to see the platform catch it.</p>
+        ${Object.entries(incidents).map(([k, v]) => `<div class="inc"><span>${esc(v)}</span><button onclick="incident(this,'${k}')">Apply</button></div>`).join("")}
+        <div class="inc"><span class="muted">Rebuild the demo data and history from scratch</span><button class="danger" onclick="resetDemo(this)">Reset demo</button></div></div>`
+      : `<div class="card"><h2>Get started</h2><ol class="muted"><li>Add a source under <a href="#/sources">Sources</a></li><li>Browse its tables and register assets</li><li>Profile an asset and accept the suggested checks</li><li>Run the checks, then add lineage in <a href="#/config">Config</a></li></ol></div>`}
+    </div>`;
+  },
+
+  async issues(params) {
+    const runId = params.get("run") || "latest";
+    const d = await api(`/api/runs/${encodeURIComponent(runId)}`);
+    if (!d.run) return topbar("Issues") + `<div class="card empty">No runs yet.</div>`;
+    const assets = [...new Set(d.results.map(r => r.asset))].sort();
+    const dims = [...new Set(d.results.map(r => r.dimension))].sort();
+    STATE.issues = d;
+    STATE.filter = { status: params.get("status") || "open", asset: "", dim: "", q: params.get("q") || "" };
+    const sub = d.run.current ? `current state · latest result of every check` : `run ${esc(d.run.run_id)} · ${when(d.run.started_at)}${d.run.scope && d.run.scope !== "all" ? " · " + esc(d.run.scope) : ""} · <a href="#/issues">back to current</a>`;
+    return topbar(`Issues <span class="muted small" style="font-weight:400">${sub}</span>`) + `
+      <div class="filters">
+        <div class="seg" id="seg">${["open","fail","warn","error","pass","all"].map(s => `<button data-s="${s}" class="${s === STATE.filter.status ? "on" : ""}">${s === "open" ? "Open issues" : s[0].toUpperCase() + s.slice(1)}</button>`).join("")}</div>
+        <select id="f-asset"><option value="">All assets</option>${assets.map(a => `<option>${esc(a)}</option>`).join("")}</select>
+        <select id="f-dim"><option value="">All dimensions</option>${dims.map(a => `<option>${esc(a)}</option>`).join("")}</select>
+        <input id="f-q" placeholder="Search checks…" value="${esc(STATE.filter.q === "—" ? "" : STATE.filter.q)}" style="flex:1;min-width:160px">
+      </div><div id="issue-list"></div>`;
+  },
+
+  async assets(params, name) {
+    if (name) return assetDetail(decodeURIComponent(name));
+    const list = await api("/api/assets");
+    return topbar("Assets", `<a class="btn" href="#/sources">+ Register a table</a>`) + `
+      <div class="card scroll"><table><thead><tr><th>Asset</th><th>Source · table</th><th>Owner</th><th class="num">Score</th>
+        <th class="num">Checks</th><th>Latest</th></tr></thead><tbody>
+      ${list.map(a => { const f = a.checks.filter(c => c.status === "fail").length, w = a.checks.filter(c => c.status === "warn").length;
+        return `<tr class="click" onclick="location.hash='#/assets/${encodeURIComponent(a.name)}'"><td><b>${esc(a.name)}</b>${a.tags.map(t => ` <span class="chip">${esc(t)}</span>`).join("")}</td>
+        <td class="muted">${esc(a.connection)} · <code>${esc(a.table)}</code></td><td>${esc(a.owner || "—")}</td>
+        <td class="num ${scoreCls(a.score)}"><b>${fmtScore(a.score)}</b></td><td class="num">${a.checks.length}</td>
+        <td>${f ? `<span class="pill fail">${f} fail</span> ` : ""}${w ? `<span class="pill warn">${w} warn</span>` : ""}${!f && !w && a.score !== null ? `<span class="pill pass">ok</span>` : ""}${a.score === null ? `<span class="muted small">not run</span>` : ""}</td></tr>`; }).join("")}
+      </tbody></table></div>`;
+  },
+
+  async lineage() {
+    const d = await api("/api/runs/latest");
+    STATE.assetsCache = await api("/api/assets");
+    const svg = d.lineage_svg;
+    return topbar("Lineage & impact") + `<div class="card">
+      <p class="muted small" style="margin-top:0"><span class="key" style="border-color:var(--bad)"></span>failing<span class="key" style="border-color:var(--ok)"></span>warning<span class="key" style="border-color:var(--info)"></span>downstream of an issue<span class="key" style="border-color:var(--good)"></span>healthy · dashed = outside system · click a node</p>
+      <div class="scroll" id="lin">${svg || `<div class="empty">No lineage yet. Declare edges in Config, or add SQL files to transforms_dir.</div>`}</div></div>
+      <div class="card section" id="lin-detail"><div class="muted">Select a node to see what feeds it and what it affects.</div></div>`;
+  },
+
+  async sources() {
+    const conns = await api("/api/connections");
+    return topbar("Sources") + `
+      <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(280px,1fr))">
+      ${conns.map(c => `<div class="card"><div style="display:flex;justify-content:space-between;gap:8px;align-items:center">
+          <b style="font-size:15px">${esc(c.name)}</b><span class="chip">${esc(c.type)}</span></div>
+          <dl class="kv small" style="grid-template-columns:90px 1fr">${Object.entries(c.settings).filter(([k]) => k !== "type").map(([k, v]) => `<dt>${esc(k)}</dt><dd style="word-break:break-all"><code>${esc(mask(k, v))}</code></dd>`).join("")}</dl>
+          <div style="display:flex;gap:8px;flex-wrap:wrap"><button onclick="testConn(this,'${esc(c.name)}')">Test connection</button>
+          <button onclick="browse(this,'${esc(c.name)}')">Browse tables</button></div><div class="small" id="t-${esc(c.name)}" style="margin-top:8px"></div></div>`).join("")}
+      </div>
+      <div class="card section" id="browse" hidden></div>
+      <div class="card section"><h2>Add a source</h2>
+        <div class="form">
+          <label class="f">Name<input id="c-name" placeholder="e.g. gcp_analytics"></label>
+          <label class="f">Type<select id="c-type" onchange="connFields()">
+            <option value="bigquery">BigQuery (GCP)</option><option value="sqlalchemy">Database URL (Postgres, SQL Server, Oracle, Snowflake, SAP HANA…)</option>
+            <option value="files">Files (CSV / Parquet / JSON)</option><option value="sqlite">SQLite file</option></select></label>
+        </div><div class="form" id="c-fields" style="margin-top:10px"></div>
+        <p class="muted small">Use <code>\${ENV_VAR}</code> for passwords and keys. Values are resolved from the server's environment and never stored in the config.</p>
+        <button class="primary" onclick="addConn(this)">Add source</button></div>`;
+  },
+
+  async history() {
+    const runs = await api("/api/runs?limit=100");
+    return topbar("Run history") + `<div class="card"><h2>Score over full runs</h2>${trendSvg([...runs].reverse().filter(r => !r.scope || r.scope === "all"))}</div>
+      <div class="card section scroll"><table><thead><tr><th>Run</th><th>When</th><th>Status</th><th class="num">Score</th>
+      <th class="num">Checks</th><th class="num">Failed</th><th class="num">Warn</th><th class="num">Errors</th></tr></thead><tbody>
+      ${runs.map(r => `<tr class="click" onclick="location.hash='#/issues?run=${encodeURIComponent(r.run_id)}'"><td><code>${esc(r.run_id)}</code>${r.scope && r.scope !== "all" ? `<div class="muted small">${esc(r.scope)}</div>` : ""}</td>
+        <td>${when(r.started_at)}</td><td><span class="pill ${r.status}">${esc(r.status)}</span></td><td class="num ${scoreCls(r.score)}"><b>${fmtScore(r.score)}</b></td>
+        <td class="num">${r.checks ?? "—"}</td><td class="num">${r.failed ?? "—"}</td><td class="num">${r.warned ?? "—"}</td><td class="num">${r.errored ?? "—"}</td></tr>`).join("")}
+      </tbody></table></div>`;
+  },
+
+  async config() {
+    const c = await api("/api/config");
+    return topbar("Configuration", `<button onclick="saveConfig(this)">Save</button>`) + `
+      <p class="muted small" style="margin-top:-8px">${esc(c.path)} · the config is validated before saving. Check types: ${c.check_types.map(t => `<code>${t}</code>`).join(", ")}. Formats: ${c.formats.join(", ")}.</p>
+      <textarea class="code" id="cfg" spellcheck="false">${esc(c.text)}</textarea>`;
+  },
+};
+
+function mask(k, v) {
+  v = String(v);
+  if (/pass|secret|token|key|credential/i.test(k) && !/^\$\{/.test(v)) return "••••••";
+  return v.replace(/(:\/\/[^:@\/]+:)([^@]+)(@)/, (m, a, p, b) => /^\$\{/.test(p) ? m : a + "••••" + b);
+}
+
+// ------------------------------------------------------------------ issues filtering
+function renderIssues() {
+  const d = STATE.issues, f = STATE.filter;
+  const q = (f.q || "").toLowerCase();
+  const rows = d.results.filter(r =>
+    (f.status === "all" || (f.status === "open" ? ["fail","warn","error"].includes(r.status) : r.status === f.status)) &&
+    (!f.asset || r.asset === f.asset) && (!f.dim || r.dimension === f.dim) &&
+    (!q || (r.check_id + " " + r.message).toLowerCase().includes(q))
+  ).sort((a, b) => (ORDER[a.status] - ORDER[b.status]) || a.check_id.localeCompare(b.check_id));
+  $("#issue-list").innerHTML = rows.length ? rows.map((r, i) => issueCard(r, d.impact, rows.length <= 3 || (i < 2 && r.status === "fail"))).join("")
+    : `<div class="card empty">Nothing matches these filters.</div>`;
+}
+function wireIssues() {
+  $("#seg").onclick = e => { const s = e.target.dataset.s; if (!s) return; STATE.filter.status = s;
+    [...$("#seg").children].forEach(b => b.classList.toggle("on", b.dataset.s === s)); renderIssues(); };
+  $("#f-asset").onchange = e => { STATE.filter.asset = e.target.value; renderIssues(); };
+  $("#f-dim").onchange = e => { STATE.filter.dim = e.target.value; renderIssues(); };
+  $("#f-q").oninput = e => { STATE.filter.q = e.target.value; renderIssues(); };
+  if (STATE.filter.q) STATE.filter.status = "all", [...$("#seg").children].forEach(b => b.classList.toggle("on", b.dataset.s === "all"));
+  renderIssues();
+}
+
+// ------------------------------------------------------------------ asset detail
+async function assetDetail(name) {
+  const list = await api("/api/assets");
+  const a = list.find(x => x.name === name);
+  if (!a) return `<div class="card empty">Asset ${esc(name)} not found.</div>`;
+  STATE.asset = a;
+  const chip = xs => xs.length ? xs.map(x => `<span class="chip">${esc(x)}</span>`).join("") : `<span class="muted">none</span>`;
+  return `<div class="top"><h1><a href="#/assets" class="muted" style="font-weight:400">Assets /</a> ${esc(a.name)}</h1>
+      <button onclick="profileAsset(this)">Profile &amp; suggest checks</button>
+      <button class="primary" onclick="runChecks(this,{assets:['${esc(a.name)}']})">▶ Run this asset</button></div>
+    <div class="grid two"><div class="card"><dl class="kv" style="margin:0">
+      <dt>Source · table</dt><dd>${esc(a.connection)} · <code>${esc(a.table)}</code></dd>
+      <dt>Owner</dt><dd>${esc(a.owner || "—")}</dd>${a.description ? `<dt>Description</dt><dd>${esc(a.description)}</dd>` : ""}
+      <dt>Upstream</dt><dd>${chip(a.upstream)}</dd><dt>Downstream</dt><dd>${chip(a.downstream)}</dd></dl></div>
+      <div class="card tile"><div class="label">Asset score (current)</div><div class="value ${scoreCls(a.score)}">${fmtScore(a.score)}</div>
+      <div class="muted small">${a.checks.length} checks · <button class="ghost danger small" onclick="deleteAsset(this)">Remove asset</button></div></div></div>
+    <div class="card section scroll"><h2>Checks</h2><table><thead><tr><th>Status</th><th>Check</th><th>Type</th><th>Severity</th><th>Latest result</th><th></th></tr></thead><tbody>
+      ${a.checks.map(c => `<tr><td><span class="pill ${c.status || "none"}">${c.status || "not run"}</span></td><td><b>${esc(c.id)}</b></td>
+        <td>${esc(c.type)}${c.column ? ` <span class="muted">· ${esc(c.column)}</span>` : ""}</td><td>${esc(c.severity)}</td>
+        <td class="muted small">${esc(c.message || "")}</td><td><button class="ghost" title="Remove check" onclick="removeCheck(this,'${esc(c.id)}')">✕</button></td></tr>`).join("")}
+    </tbody></table></div>
+    <div class="card section"><h2>Add a check</h2><div class="form">
+      <label class="f">Type<select id="k-type">${["not_null","unique","accepted_values","range","regex","expression","freshness","row_count","schema","volume_anomaly","referential_integrity","reconciliation","custom_sql"].map(t => `<option>${t}</option>`).join("")}</select></label>
+      <label class="f">Column<input id="k-col" placeholder="column name"></label>
+      <label class="f">Severity<select id="k-sev"><option>error</option><option>warn</option></select></label>
+      <label class="f" style="grid-column:1/-1">Extra settings (JSON)<input id="k-extra" placeholder='e.g. {"min": 0} · {"values": ["A","B"]} · {"format": "email"} · {"max_age": "6h"}'></label>
+      </div><div style="margin-top:10px"><button class="primary" onclick="addCheck(this)">Add check</button></div></div>
+    <div id="profile"></div>`;
+}
+
+async function profileAsset(btn) {
+  btn.dataset.busy = "Profiling…";
+  await busy(btn, async () => {
+    const d = await api("/api/profile", { method: "POST", body: { asset: STATE.asset.name } });
+    STATE.sugg = d.suggestions;
+    const p = d.profile;
+    $("#profile").innerHTML = `<div class="card section scroll"><h2>Profile <span class="muted small">${p.rows} rows</span></h2>
+      <table><thead><tr><th>Column</th><th>Type</th><th class="num">Null %</th><th class="num">Distinct</th><th>Min</th><th>Max</th><th>Top values</th></tr></thead><tbody>
+      ${p.columns.map(c => `<tr><td><b>${esc(c.name)}</b></td><td class="muted">${esc(c.type)}</td><td class="num ${c.null_pct > 0 ? "ok" : ""}">${c.null_pct}</td>
+        <td class="num">${c.distinct}</td><td class="small">${esc(c.min)}</td><td class="small">${esc(c.max)}</td>
+        <td class="small">${(c.top_values || []).map(([v, n]) => `<span class="chip">${esc(v)} · ${n}</span>`).join("")}</td></tr>`).join("")}
+      </tbody></table></div>
+      <div class="card section"><h2>Suggested checks</h2><p class="muted small" style="margin-top:-6px">Derived from the profile. Review the thresholds before adopting them.</p>
+      ${d.suggestions.map((s, i) => `<label style="display:flex;gap:10px;align-items:flex-start;padding:6px 0;border-bottom:1px solid var(--line)">
+        <input type="checkbox" data-i="${i}" ${s.exists ? "disabled" : "checked"}><span><b>${esc(s.check.type)}</b>${s.check.column ? ` on <code>${esc(s.check.column)}</code>` : ""}
+        <span class="muted small">${esc(Object.fromEntries(Object.entries(s.check).filter(([k]) => !["type","column"].includes(k))))}</span>
+        ${s.exists ? `<span class="chip">already covered</span>` : ""}</span></label>`).join("")}
+      <div style="margin-top:12px"><button class="primary" onclick="acceptSugg(this)">Add selected checks</button></div></div>`;
+    $("#profile").scrollIntoView({ behavior: "smooth" });
+  });
+}
+async function acceptSugg(btn) {
+  const picks = [...document.querySelectorAll("#profile input[type=checkbox]:checked:not(:disabled)")].map(i => STATE.sugg[+i.dataset.i].check);
+  if (!picks.length) return toast("Nothing selected");
+  await busy(btn, async () => {
+    await api(`/api/assets/${encodeURIComponent(STATE.asset.name)}/checks`, { method: "POST", body: { checks: picks } });
+    toast(`Added ${picks.length} checks to ${STATE.asset.name}`); await refreshShell(); route();
+  });
+}
+async function addCheck(btn) {
+  let extra = {};
+  try { extra = $("#k-extra").value.trim() ? JSON.parse($("#k-extra").value) : {}; } catch { return toast("Extra settings must be valid JSON", true); }
+  const chk = { type: $("#k-type").value, ...extra };
+  if ($("#k-col").value.trim()) chk.column = $("#k-col").value.trim();
+  if ($("#k-sev").value === "warn") chk.severity = "warn";
+  await busy(btn, async () => {
+    await api(`/api/assets/${encodeURIComponent(STATE.asset.name)}/checks`, { method: "POST", body: { checks: [chk] } });
+    toast("Check added. Run the asset to evaluate it."); await refreshShell(); route();
+  });
+}
+async function removeCheck(btn, id) {
+  if (!confirm(`Remove ${id}?`)) return;
+  await busy(btn, async () => { await api(`/api/assets/${encodeURIComponent(STATE.asset.name)}/checks`, { method: "DELETE", body: { id } });
+    toast("Check removed"); await refreshShell(); route(); });
+}
+async function deleteAsset(btn) {
+  if (!confirm(`Remove asset ${STATE.asset.name} and its checks from the project?`)) return;
+  await busy(btn, async () => { await api(`/api/assets/${encodeURIComponent(STATE.asset.name)}`, { method: "DELETE" });
+    toast("Asset removed"); await refreshShell(); location.hash = "#/assets"; });
+}
+
+// ------------------------------------------------------------------ sources
+const CONN_FIELDS = {
+  bigquery: [["project", "GCP project id", "${GCP_PROJECT}"], ["dataset", "Dataset", "analytics"], ["location", "Location (optional)", "EU"], ["maximum_bytes_billed", "Max bytes billed per query", "10000000000"]],
+  sqlalchemy: [["url", "SQLAlchemy URL", "postgresql+psycopg2://${PG_USER}:${PG_PASSWORD}@host:5432/db"], ["schema", "Schema (optional)", "public"]],
+  files: [["path", "Folder", "./exports"], ["pattern", "Pattern", "*.csv"]],
+  sqlite: [["path", "Database file", "./data.db"]],
+};
+function connFields() {
+  const t = $("#c-type").value;
+  $("#c-fields").innerHTML = CONN_FIELDS[t].map(([k, l, ph]) => `<label class="f">${l}<input data-k="${k}" placeholder="${esc(ph)}"></label>`).join("");
+}
+async function addConn(btn) {
+  const settings = { type: $("#c-type").value };
+  document.querySelectorAll("#c-fields input").forEach(i => { if (i.value.trim()) settings[i.dataset.k] = i.dataset.k === "maximum_bytes_billed" ? +i.value : i.value.trim(); });
+  await busy(btn, async () => { await api("/api/connections", { method: "POST", body: { name: $("#c-name").value.trim(), settings } });
+    toast("Source added. Test it, then browse its tables."); await refreshShell(); route(); });
+}
+async function testConn(btn, name) {
+  await busy(btn, async () => { const r = await api(`/api/connections/${name}/test`, { method: "POST" });
+    $(`#t-${name}`).innerHTML = r.ok ? `<span class="good">✓ Connected</span> · ${r.tables} tables · ${r.dialect} · ${r.ms} ms` : `<span class="bad">✗ ${esc(r.error)}</span>`; });
+}
+async function browse(btn, name) {
+  await busy(btn, async () => {
+    const tables = await api(`/api/connections/${name}/tables`);
+    const el = $("#browse"); el.hidden = false;
+    el.innerHTML = `<h2>Tables in ${esc(name)}</h2><div class="scroll"><table><thead><tr><th>Table</th><th></th></tr></thead><tbody>
+      ${tables.map(t => `<tr><td><code>${esc(t.table)}</code> <button class="ghost small" onclick="cols(this,'${esc(name)}','${esc(t.table)}')">columns</button><div class="small muted"></div></td>
+        <td style="text-align:right">${t.registered ? `<span class="chip">registered</span>` : `<button onclick="register(this,'${esc(name)}','${esc(t.table)}')">Register as asset</button>`}</td></tr>`).join("")}
+      </tbody></table></div>`;
+    el.scrollIntoView({ behavior: "smooth" });
+  });
+}
+async function cols(btn, conn, table) {
+  const r = await api(`/api/connections/${conn}/tables?table=${encodeURIComponent(table)}`);
+  btn.nextElementSibling.innerHTML = r.columns.map(c => `<span class="chip">${esc(c.name)} <span class="muted">${esc(c.type)}</span></span>`).join("");
+}
+async function register(btn, conn, table) {
+  const name = prompt("Asset name", table.split(".").pop().toLowerCase().replace(/[^a-z0-9_]/g, "_"));
+  if (!name) return;
+  const owner = prompt("Owner (team or person, optional)", "") || "";
+  await busy(btn, async () => {
+    await api("/api/assets", { method: "POST", body: { name, connection: conn, table, owner } });
+    toast(`Registered ${name}. Profiling it now…`); await refreshShell();
+    location.hash = `#/assets/${encodeURIComponent(name)}`;
+    setTimeout(() => { const b = [...document.querySelectorAll("button")].find(b => b.textContent.startsWith("Profile")); b && b.click(); }, 400);
+  });
+}
+
+// ------------------------------------------------------------------ misc actions
+async function incident(btn, kind) {
+  await busy(btn, async () => { const r = await api("/api/demo/incident", { method: "POST", body: { kind } });
+    toast(`Applied: ${r.message}. Now run the checks.`); });
+}
+async function resetDemo(btn) {
+  if (!confirm("Rebuild the demo databases and run history?")) return;
+  btn.dataset.busy = "Rebuilding…";
+  await busy(btn, async () => { await api("/api/demo/reset", { method: "POST" }); toast("Demo reset"); await refreshShell(); route(); });
+}
+async function saveConfig(btn) {
+  await busy(btn, async () => { await api("/api/config", { method: "PUT", body: { text: $("#cfg").value } }); toast("Saved and validated"); await refreshShell(); });
+}
+function wireLineage() {
+  const svg = $("#lin svg"); if (!svg) return;
+  svg.querySelectorAll(".node").forEach(n => n.addEventListener("click", () => {
+    svg.querySelectorAll(".node").forEach(x => x.classList.remove("sel")); n.classList.add("sel");
+    const id = n.querySelector("title").textContent;
+    const a = (STATE.assetsCache || []).find(x => x.name === id);
+    const chips = xs => xs && xs.length ? xs.map(x => `<span class="chip">${esc(x)}</span>`).join("") : `<span class="muted">none</span>`;
+    $("#lin-detail").innerHTML = a ? `<h2>${esc(id)}</h2><dl class="kv"><dt>Source · table</dt><dd>${esc(a.connection)} · <code>${esc(a.table)}</code></dd>
+      <dt>Owner</dt><dd>${esc(a.owner || "—")}</dd><dt>Score</dt><dd class="${scoreCls(a.score)}"><b>${fmtScore(a.score)}</b></dd>
+      <dt>Fed by</dt><dd>${chips(a.upstream)}</dd><dt>Affects</dt><dd>${chips(a.downstream)}</dd></dl><a href="#/assets/${encodeURIComponent(id)}">Open asset →</a>`
+      : `<h2>${esc(id)}</h2><p class="muted">System outside the checked assets (declared lineage).</p>`;
+  }));
+}
+
+// ------------------------------------------------------------------ router
+async function route() {
+  const [path, qs] = (location.hash.slice(2) || "overview").split("?");
+  const [page, arg] = path.split("/");
+  const fn = PAGES[page] || PAGES.overview;
+  document.querySelectorAll("#nav a").forEach(a => a.classList.toggle("active", a.dataset.r === (PAGES[page] ? page : "overview")));
+  try {
+    $("#main").innerHTML = await fn(new URLSearchParams(qs || ""), arg);
+    if (page === "issues" && STATE.issues && $("#issue-list")) wireIssues();
+    if (page === "lineage") wireLineage();
+    if (page === "sources") connFields();
+  } catch (e) {
+    $("#main").innerHTML = `<div class="card empty bad">${esc(e.message)}</div>`;
+  }
+}
+window.addEventListener("hashchange", route);
+refreshShell().catch(e => toast(e.message, true)).finally(route);
+</script>
+</body>
+</html>

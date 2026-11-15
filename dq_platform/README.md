@@ -13,7 +13,30 @@ SAP HANA, an ERP's own database, or CSV/Parquet extracts.
  Files ────┘                                  └─► lineage graph + downstream impact
 ```
 
-## Try it in 30 seconds
+## Run the prototype (web app)
+
+```bash
+pip install PyYAML
+python -m dq_platform serve --demo        # then open http://127.0.0.1:8765
+python -m dq_platform serve -p dq_project.yml   # your own project
+```
+
+Pages:
+- **Overview**: quality score, failing checks, score by dimension, trend over full runs, open issues. In demo mode there are also buttons that simulate real incidents (ERP schema change, lost orders, a bad batch, a fixed load).
+- **Issues**: filter by status, asset, dimension or text. Each issue shows observed vs expected, sample rows, the SQL that ran and downstream impact.
+- **Assets**: score per asset. Open one to run it, add or remove checks, or **profile it and accept suggested checks** with a click.
+- **Lineage**: graph coloured by health and impact. Click a node to see what feeds it and what it affects.
+- **Sources**: add BigQuery, a database URL, files or SQLite, test the connection, browse tables and register them as assets.
+- **History**: every run. Open one to see its results.
+- **Config**: edit the project YAML in the browser. It is validated before saving.
+
+Overview, Issues and Assets show the *current state*: the latest result of
+every check, so running one asset never hides issues found elsewhere.
+The server uses only the Python standard library and binds to localhost with
+no login. Put it behind your SSO (e.g. IAP on Cloud Run) before sharing it.
+Saving from the UI rewrites the YAML, which drops comments.
+
+## Try it from the command line
 
 ```bash
 pip install PyYAML
@@ -109,6 +132,7 @@ python -m dq_platform discover -p dq_project.yml <connection> [--table T]
 python -m dq_platform profile  -p dq_project.yml --asset X      # profile + suggested checks as YAML
 python -m dq_platform lineage  -p dq_project.yml [--asset X] [--format mermaid|json|dot]
 python -m dq_platform history  -p dq_project.yml
+python -m dq_platform serve    -p dq_project.yml [--port 8765] [--host 127.0.0.1]
 ```
 
 `run` exits with code 1 when checks fail, so it can be dropped into CI, Airflow
@@ -128,7 +152,9 @@ dq_platform/
   store.py      run history (SQLite): results, metrics, schema snapshots
   report.py     HTML + JSON reports
   packs/        ERP-agnostic rule packs
-  demo.py       sample ERP -> warehouse project
+  demo.py       sample ERP -> warehouse project + incident simulator
+  web.py        JSON API + server for the web app
+  ui/           single-page web UI (no build step, no CDN)
 ```
 
 ## Known limits / next steps
@@ -140,4 +166,4 @@ dq_platform/
 - The BigQuery, SQLAlchemy and file connectors are written against their public
   APIs but are only exercised by the tests via SQLite. Validate them against your
   own systems before relying on them.
-- Planned: a web UI or API, alert routing (Slack, email), and an OpenLineage export.
+- Planned: alert routing (Slack, email), scheduled runs, user logins and roles, and an OpenLineage export.

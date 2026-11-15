@@ -107,3 +107,68 @@ class TestUnits(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestWebApi(unittest.TestCase):
+    """Drives the web API the UI uses, against a live server on a free port."""
+
+    @classmethod
+    def setUpClass(cls):
+        import threading
+        from http.server import ThreadingHTTPServer
+        from dq_platform.web import App, make_handler, seed_demo
+        cls.tmp = tempfile.TemporaryDirectory()
+        demo = Path(cls.tmp.name) / "demo"
+        project = seed_demo(demo, baseline_runs=2)
+        cls.httpd = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(App(project, demo)))
+        cls.base = f"http://127.0.0.1:{cls.httpd.server_address[1]}"
+        threading.Thread(target=cls.httpd.serve_forever, daemon=True).start()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.httpd.shutdown()
+        cls.httpd.server_close()
+        cls.tmp.cleanup()
+
+    def call(self, path, method="GET", body=None):
+        import json
+        import urllib.error
+        import urllib.request
+        req = urllib.request.Request(self.base + path, method=method,
+                                     data=None if body is None else json.dumps(body).encode(),
+                                     headers={"Content-Type": "application/json"})
+        try:
+            with urllib.request.urlopen(req) as r:
+                return r.status, json.loads(r.read())
+        except urllib.error.HTTPError as e:
+            return e.code, json.loads(e.read())
+
+    def test_ui_served(self):
+        import urllib.request
+        with urllib.request.urlopen(self.base + "/") as r:
+            self.assertIn(b"DQ Platform", r.read())
+
+    def test_workflow(self):
+        s, o = self.call("/api/overview")
+        self.assertEqual(s, 200)
+        self.assertEqual(o["assets"], 7)
+        self.assertEqual(self.call("/api/demo/incident", "POST", {"kind": "bad_batch"})[0], 200)
+        s, run = self.call("/api/run", "POST", {})
+        self.assertEqual((s, run["status"]), (200, "fail"))
+        s, tables = self.call("/api/connections/erp/tables")
+        self.assertIn("products", [t["table"] for t in tables])
+        s, _ = self.call("/api/assets", "POST", {"name": "erp_products", "connection": "erp", "table": "products"})
+        self.assertEqual(s, 200)
+        s, prof = self.call("/api/profile", "POST", {"asset": "erp_products"})
+        picks = [x["check"] for x in prof["suggestions"] if not x["exists"]]
+        self.assertNotIn(("unique", "name"), [(c["type"], c.get("column")) for c in picks])
+        self.assertEqual(self.call("/api/assets/erp_products/checks", "POST", {"checks": picks})[0], 200)
+        s, part = self.call("/api/run", "POST", {"assets": ["erp_products"]})
+        self.assertEqual(part["status"], "pass")
+        # a partial run must not hide issues found by the full run
+        s, cur = self.call("/api/runs/latest")
+        self.assertTrue(any(r["check_id"] == "erp_orders.currency_iso" and r["status"] == "fail" for r in cur["results"]))
+        self.assertIn("svg", cur["lineage_svg"])
+        s, err = self.call("/api/config", "PUT", {"text": "assets:\n  x: {connection: nope, table: t}\n"})
+        self.assertEqual(s, 400)
+        self.assertEqual(self.call("/api/overview")[1]["assets"], 8)  # bad config was not saved

@@ -104,7 +104,8 @@ def run_project(project: Project | str, assets=None, tags=None, store: Store | N
     owns_store = store is None
     store = store or Store(project.store_path)
     started = datetime.now(timezone.utc)
-    run_id = store.start_run(project.name)
+    scope = "all" if not assets and not tags else "partial: " + ", ".join((assets or []) + [f"tag:{t}" for t in tags or []])
+    run_id = store.start_run(project.name, scope)
 
     selected = [a for a in project.assets.values()
                 if (not assets or a.name in assets) and (not tags or set(tags) & set(a.tags))]

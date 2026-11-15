@@ -6,6 +6,7 @@
   profile    profile an asset (or any table) and suggest checks
   lineage    print the lineage graph, or the upstream/downstream of one asset
   history    show recent runs and scores
+  serve      start the web app (add --demo for the sample project)
 """
 
 from __future__ import annotations
@@ -142,6 +143,20 @@ def cmd_history(args):
     return 0
 
 
+def cmd_serve(args):
+    from .web import seed_demo, serve
+    demo_dir = None
+    project = args.project
+    if args.demo:
+        demo_dir = args.dir
+        print("preparing demo data and baseline runs…")
+        project = str(seed_demo(demo_dir))
+    elif not Path(project).exists():
+        raise SystemExit(f"{project} not found. Use --demo, or -p path/to/dq_project.yml")
+    serve(project, host=args.host, port=args.port, demo_dir=demo_dir)
+    return 0
+
+
 def build_parser():
     p = argparse.ArgumentParser(prog="dq", description="Platform-agnostic data quality, integrity and lineage.")
     sub = p.add_subparsers(dest="command", required=True)
@@ -184,6 +199,14 @@ def build_parser():
     sp.add_argument("--asset", help="show upstream/downstream of this asset")
     sp.add_argument("--format", choices=["mermaid", "json", "dot"], default="mermaid")
     sp.set_defaults(fn=cmd_lineage)
+
+    sp = sub.add_parser("serve", help="start the web app")
+    sp.add_argument("-p", "--project", default="dq_project.yml")
+    sp.add_argument("--demo", action="store_true", help="serve the sample ERP + warehouse project")
+    sp.add_argument("--dir", default="dq_demo", help="where the demo project lives")
+    sp.add_argument("--host", default="127.0.0.1")
+    sp.add_argument("--port", type=int, default=8765)
+    sp.set_defaults(fn=cmd_serve)
 
     sp = sub.add_parser("history", help="recent runs")
     sp.add_argument("-p", "--project", default="dq_project.yml")

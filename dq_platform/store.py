@@ -48,11 +48,14 @@ class Store:
         self.db = sqlite3.connect(str(path))
         self.db.row_factory = sqlite3.Row
         self.db.executescript(SCHEMA)
+        cols = {r["name"] for r in self.db.execute("PRAGMA table_info(runs)")}
+        if "scope" not in cols:  # migrate stores created before run scopes existed
+            self.db.execute("ALTER TABLE runs ADD COLUMN scope TEXT DEFAULT 'all'")
 
-    def start_run(self, project: str) -> str:
+    def start_run(self, project: str, scope: str = "all") -> str:
         run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S") + "-" + uuid.uuid4().hex[:6]
-        self.db.execute("INSERT INTO runs (run_id, project, started_at, status) VALUES (?,?,?,?)",
-                        (run_id, project, _now(), "running"))
+        self.db.execute("INSERT INTO runs (run_id, project, started_at, status, scope) VALUES (?,?,?,?,?)",
+                        (run_id, project, _now(), "running", scope))
         self.db.commit()
         return run_id
 
@@ -102,7 +105,23 @@ class Store:
             "SELECT * FROM runs ORDER BY started_at DESC, run_id DESC LIMIT ?", (limit,))]
 
     def score_trend(self, limit=20):
-        return list(reversed(self.runs(limit)))
+        """Score over full-project runs only; partial runs would distort the line."""
+        rows = self.db.execute("SELECT * FROM runs WHERE COALESCE(scope,'all')='all' AND status != 'running' "
+                               "ORDER BY started_at DESC, run_id DESC LIMIT ?", (limit,))
+        return list(reversed([dict(r) for r in rows]))
+
+    def current_results(self, check_ids=None):
+        """Latest result of every check, whichever run produced it."""
+        rows = self.db.execute(
+            "SELECT r.*, runs.started_at AS checked_at FROM results r JOIN runs USING (run_id) "
+            "WHERE runs.status != 'running' ORDER BY runs.started_at DESC, r.run_id DESC").fetchall()
+        seen, out = set(), []
+        for row in rows:
+            if row["check_id"] in seen or (check_ids is not None and row["check_id"] not in check_ids):
+                continue
+            seen.add(row["check_id"])
+            out.append(dict(row))
+        return out
 
     def close(self):
         self.db.close()

@@ -251,3 +251,50 @@ def build_demo(target: str | Path = "dq_demo", seed: int = 7, now: datetime | No
 
     (root / "dq_project.yml").write_text(PROJECT_YAML)
     return root / "dq_project.yml"
+
+
+INCIDENTS = {
+    "schema_change": "ERP upgrade adds a column to the customer master (schema drift)",
+    "volume_drop": "Half of today's ERP orders disappear (volume anomaly + reconciliation)",
+    "bad_batch": "A bad batch posts orders with invalid currency and negative values",
+    "fix_load": "Re-run the warehouse load: fresh timestamps, missing orders back",
+}
+
+
+def apply_incident(root: str | Path, kind: str) -> str:
+    """Mutate the demo databases to simulate a real-world data incident."""
+    root = Path(root)
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    erp = sqlite3.connect(root / "erp.db")
+    wh = sqlite3.connect(root / "warehouse.db")
+    try:
+        if kind == "schema_change":
+            cols = [r[1] for r in erp.execute("PRAGMA table_info(customers)")]
+            if "vat_id" not in cols:
+                erp.execute("ALTER TABLE customers ADD COLUMN vat_id TEXT")
+        elif kind == "volume_drop":
+            n = erp.execute("SELECT COUNT(*) FROM sales_orders").fetchone()[0]
+            erp.execute("DELETE FROM sales_orders WHERE order_id IN "
+                        "(SELECT order_id FROM sales_orders ORDER BY order_id DESC LIMIT ?)", (n // 2,))
+        elif kind == "bad_batch":
+            start = (erp.execute("SELECT MAX(order_id) FROM sales_orders").fetchone()[0] or 100000) + 1
+            rows = [(start + i, "C00010", now, "OPEN", "EURO" if i % 2 else "eu", -50.0 * (i + 1))
+                    for i in range(12)]
+            erp.executemany("INSERT INTO sales_orders VALUES (?,?,?,?,?,?)", rows)
+        elif kind == "fix_load":
+            wh.execute("DELETE FROM stg_orders")
+            erp_rows = erp.execute("SELECT * FROM sales_orders").fetchall()
+            wh.executemany("INSERT INTO stg_orders VALUES (?,?,?,?,?,?,?)", [(*r, now) for r in erp_rows])
+            wh.execute("UPDATE stg_customers SET _loaded_at = ?", (now,))
+            wh.execute("DROP VIEW IF EXISTS rpt_revenue_by_country")
+            wh.execute("DROP TABLE IF EXISTS fct_sales")
+            wh.executescript(FCT_SALES_SQL)
+            wh.executescript(VIEW_SQL)
+        else:
+            raise ValueError(f"unknown incident {kind!r}; choose from {', '.join(INCIDENTS)}")
+        erp.commit()
+        wh.commit()
+    finally:
+        erp.close()
+        wh.close()
+    return INCIDENTS[kind]
